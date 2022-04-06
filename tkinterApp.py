@@ -5,7 +5,8 @@
 #
 #####
 # importing required packages
-from glob import glob
+#from curses import raw
+#from glob import glob
 import tkinter
 from tkinter import filedialog
 from unittest import result
@@ -29,10 +30,39 @@ imageList = []
 
 # changes the image being presented to the one on the slider
 def SetImage(target, val):
-    target.config(image = imageList[int(val)])
+    target.config(image = imageList[int(val) - 1])
+
+# used to show a message to the user in a new window
+def Alert(message):
+    alertBox = getattr(tkinter.messagebox, 'show{}'.format('info'))
+    alertBox("Alert", message)
+
+# used to validate the numbers user inputed in the UI
+# returns true if all values are acceptable
+def ValidateInput():
+    if not fromImgNum.get().isdigit():
+        Alert("\"From\" value must be a number")
+        return False
+    if not toImgNum.get().isdigit():
+        Alert("\"To\" value must be a number")
+        return False
+    if int(fromImgNum.get()) < 1 or int(fromImgNum.get()) > len(imageList):
+        Alert("\"From\" value must be greater than 0 and less than the number of images")
+        return False
+    if int(toImgNum.get()) < 1 or int(toImgNum.get()) > len(imageList):
+        Alert("\"To\" value must be greater than 0 and less than the number of images")
+        return False
+    if int(toImgNum.get()) < int(fromImgNum.get()):
+        Alert("\"To\" value must be greater than or equal to the \"From\" value")
+        return False
+
+    return True
 
 # calculates the difference and highlights the pixels that match the specifications
 def CalculateDiff(target):
+    if not ValidateInput():
+        return
+
     # calculates the baseline
     global baseLine
     baseLine = rawImages[0] / currBase.get()
@@ -45,16 +75,21 @@ def CalculateDiff(target):
     # negative values are set to 0 difference
     global diffMaps
     diffMaps.clear()
-    for i in range(currBase.get(), len(rawImages)):
+    for i in range(int(fromImgNum.get()) - 1, int(toImgNum.get())):
         curr = baseLine.astype(np.int16) - rawImages[i]
         curr = curr.clip(min = 0)
         diffMaps.append(curr.astype(np.uint8))
+    
+    #for i in range(currBase.get(), len(rawImages)):
+    #    curr = baseLine.astype(np.int16) - rawImages[i]
+    #    curr = curr.clip(min = 0)
+    #    diffMaps.append(curr.astype(np.uint8))
 
 
     # only shows the difference that is sufficient
-    for i in range(len(diffMaps) - 1):
+    for i in range(len(diffMaps)):
         for iy, ix in np.ndindex(diffMaps[i].shape):
-            if(diffMaps[i][iy][ix] < currDiff.get()):# and diffMaps[i + 1][iy][ix] < currDiff.get()):
+            if(diffMaps[i][iy][ix] < currDiff.get()):
                 diffMaps[i][iy][ix] = 0
             else:
                 diffMaps[i][iy][ix] = 255
@@ -64,7 +99,15 @@ def CalculateDiff(target):
     global resultMap
     resultMap = diffMaps[0]
     for i in range(1, len(diffMaps)):
-        resultMap = resultMap + diffMaps[i]
+        for iy, ix in np.ndindex(diffMaps[i].shape):
+            if(resultMap[iy][ix] == 255 and diffMaps[i][iy][ix] == 255):
+                resultMap[iy][ix] = 255
+            else:
+                resultMap[iy][ix] = 0
+
+        #resultMap = resultMap + diffMaps[i]
+    resultNum.set(str(np.count_nonzero(resultMap == 255)))
+
 
     # draws the resulting image 
     im = Image.fromarray(resultMap)
@@ -74,10 +117,34 @@ def CalculateDiff(target):
 
     target.config(image = resultImage)
 
+
+# used as a helper function resetting the UI and 
+def ResetInputsGui():
+    #global scaleCurrImg
+
+    scaleCurrImg.config(to=len(imageList))
+    #currBase.set(min(currBase.get(), len(imageList)))
+    imageDisplay.config(image=imageList[0])
+    pass
+
+# Gets the files selected by the user and generates the image list and raw image list from the files
+# this also runs the acrivator function allowing the user to 
 def BrowseFiles():
     global chosenImagePaths
+    global rawImages
+    global imageList
     chosenImagePaths = tkinter.filedialog.askopenfiles(title = "Select Files")
-    print(chosenImagePaths)
+    imageList.clear()
+    rawImages.clear()
+    # Generates Image list and raw image list in a sorta sloppy way
+    for im in chosenImagePaths:
+        #print(im.name)
+        curr = Image.open(im.name)
+        rawImages.append(np.array(curr))
+        curr = curr.resize((int(curr.width * currImageScale), int(curr.height * currImageScale)))
+        imageList.append(ImageTk.PhotoImage(curr))
+    ResetInputsGui()
+
 
 # saves the generated image to the filename specified
 def SaveToFile():
@@ -118,7 +185,7 @@ if __name__ == "__main__":
 
     labelCurrImg = tkinter.Label(root, text="Current Image:")
     labelCurrImg.place(x= 290, y=80)
-    scaleCurrImg = tkinter.Scale(root, from_=0, to=14, orient = tkinter.HORIZONTAL, command=partial(SetImage, imageDisplay))
+    scaleCurrImg = tkinter.Scale(root, from_=1, to=15, orient = tkinter.HORIZONTAL, command=partial(SetImage, imageDisplay))
     scaleCurrImg.place(x = 380, y=60)
 
     # Draws the result image initial is copy of first from image set
@@ -142,13 +209,27 @@ if __name__ == "__main__":
     scaleDiff.place(x=120, y=40)
 
 
-    # Draws Required Ajacent scale and label    
-    reqAdjLabel = tkinter.Label(root, text="Required Adjacent:")
-    reqAdjLabel.place(x=5, y=100)
-    reqAdj = tkinter.IntVar()
-    reqAdj.set(2)
-    reqAdjScale = tkinter.Scale(root, variable=reqAdj, from_=1, to= 4, orient= tkinter.HORIZONTAL)
-    reqAdjScale.place(x=120, y=80)
+    # Draws Check Images UI
+    labelCheckTitle = tkinter.Label(root, text="Check Images:")
+    labelCheckTitle.place(x=5, y=100)
+    labelCheckFrom = tkinter.Label(root, text="From:")
+    labelCheckFrom.place(x=40, y=120)
+    labelCheckTo = tkinter.Label(root, text="To:")
+    labelCheckTo.place(x=120, y=120)
+    fromImgNum = tkinter.StringVar()
+    inputFrom = tkinter.Entry(root, textvariable=fromImgNum, width=5)
+    inputFrom.place(x=80 ,y=120)
+    toImgNum = tkinter.StringVar()
+    inputFrom = tkinter.Entry(root, textvariable=toImgNum, width=5)
+    inputFrom.place(x=140 ,y=120)
+
+    # Draws number of pixels that are 
+    labelResultingNumTitle = tkinter.Label(root, text="Number of Pixels:")
+    labelResultingNumTitle.place(x=500, y=320)
+    resultNum = tkinter.StringVar()
+    resultNum.set("NaN")
+    labelResultingNum = tkinter.Entry(root, textvariable=resultNum,width=5 ,state= tkinter.DISABLED)
+    labelResultingNum.place(x=610, y=320)
 
     # Draws buttons
     calculateButton = tkinter.Button(root, text="Calculate", command=partial(CalculateDiff, imageFinal))
@@ -156,7 +237,6 @@ if __name__ == "__main__":
     saveButton = tkinter.Button(root, text="Save to file", command=SaveToFile)
     saveButton.place(x=500, y=350)
     
-
     currImage = imageDisplay
 
     
