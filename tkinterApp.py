@@ -5,19 +5,21 @@
 #
 #####
 # importing required packages
-#from curses import raw
 #from glob import glob
 import tkinter
 from tkinter import filedialog
-from unittest import result
+#from unittest import result
 from PIL import ImageTk, Image
-import os
+#import os
 from functools import partial
-from matplotlib.pyplot import show
+#from matplotlib import image
+#from matplotlib.pyplot import show
 import numpy as np
-from sklearn.preprocessing import scale
+#from sklearn.preprocessing import scale
 
 chosenImagePaths = []
+
+resultPNG = []
 
 currImageScale = 2
 rawImages = []
@@ -111,6 +113,8 @@ def CalculateDiff(target):
 
     # draws the resulting image 
     im = Image.fromarray(resultMap)
+    global resultPNG
+    resultPNG = im
     im = im.resize((int(im.width * currImageScale), int(im.height * currImageScale)))
     global resultImage 
     resultImage = ImageTk.PhotoImage(im)
@@ -120,12 +124,13 @@ def CalculateDiff(target):
 
 # used as a helper function resetting the UI and 
 def ResetInputsGui():
-    #global scaleCurrImg
-
+    # Updates the current image scale and display
     scaleCurrImg.config(to=len(imageList))
-    #currBase.set(min(currBase.get(), len(imageList)))
     imageDisplay.config(image=imageList[0])
-    pass
+
+    # Updates the Base scale
+    scaleBase.config(to=len(imageList))
+    
 
 # Gets the files selected by the user and generates the image list and raw image list from the files
 # this also runs the acrivator function allowing the user to 
@@ -148,8 +153,16 @@ def BrowseFiles():
 
 # saves the generated image to the filename specified
 def SaveToFile():
-    print("Not inplemented yet!")
-
+    if resultPNG == []:
+        Alert("No Image has been generated")
+        return
+    
+    file = tkinter.filedialog.asksaveasfile(
+        initialfile="result.png", 
+        defaultextension=".png",
+    )
+    resultPNG.save(file.name, "PNG")
+    
 if __name__ == "__main__":
 
     # hard coded paths used for debugging
@@ -189,7 +202,7 @@ if __name__ == "__main__":
     scaleCurrImg.place(x = 380, y=60)
 
     # Draws the result image initial is copy of first from image set
-    imageFinal = tkinter.Label(root, image = imageList[0])
+    imageFinal = tkinter.Label(root)#, image = imageList[0])
     imageFinal.place(x = 500, y = 100)
 
     # Draws Base scale and label

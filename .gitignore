@@ -3,3 +3,16 @@
 
 # File that is generated to test in VSCode
 tempCodeRunnerFile.py
+
+# images created or being used
+*.png
+
+# Folders and files used to try to creating an executable
+/build/
+/dist/
+/__pycache__/
+tkinterApp.spec
+
+
+# virtual environment folder
+/tkinterEnv/
