@@ -1,3 +1,4 @@
+#!/e/Anaconda3/python
 #####
 # By: Maciej Walczak  
 # This is a simple python tkinter app used to highlight the
@@ -164,14 +165,14 @@ def SaveToFile():
     resultPNG.save(file.name, "PNG")
     
 if __name__ == "__main__":
-
+    
     # hard coded paths used for debugging
-    imagePaths = []
-    for i in range(15):
-        if i < 10:
-            imagePaths.append('For quantification png/acute intervention - 20220404_164345_pw040422_BBBO_2_acute_intervention_1_1 - seq no  8 -1000'+str(i)+'.png')
-        else:
-            imagePaths.append('For quantification png/acute intervention - 20220404_164345_pw040422_BBBO_2_acute_intervention_1_1 - seq no  8 -100'+str(i)+'.png')
+    #imagePaths = []
+    #for i in range(15):
+    #    if i < 10:
+    #        imagePaths.append('For quantification png/acute intervention - 20220404_164345_pw040422_BBBO_2_acute_intervention_1_1 - seq no  8 -1000'+str(i)+'.png')
+    #    else:
+    #        imagePaths.append('For quantification png/acute intervention - 20220404_164345_pw040422_BBBO_2_acute_intervention_1_1 - seq no  8 -100'+str(i)+'.png')
     
 
     # creating main window
@@ -185,20 +186,20 @@ if __name__ == "__main__":
 
     # creates an image list from the selection
     # and a list of values to be edited
-    for path in imagePaths:
-        currImage = Image.open(path)
-        rawImages.append(np.array(currImage))
-        currImage = currImage.resize((int(currImage.width * currImageScale), int(currImage.height * currImageScale)))
-        imageList.append(ImageTk.PhotoImage(currImage))
+    #for path in imagePaths:
+    #    currImage = Image.open(path)
+    #    rawImages.append(np.array(currImage))
+    #    currImage = currImage.resize((int(currImage.width * currImageScale), int(currImage.height * currImageScale)))
+    #    imageList.append(ImageTk.PhotoImage(currImage))
     
 
     # Draws the orginial image set 
-    imageDisplay = tkinter.Label(root, image = imageList[0])
+    imageDisplay = tkinter.Label(root)#, image = imageList[0])
     imageDisplay.place(x=300, y=100)
 
     labelCurrImg = tkinter.Label(root, text="Current Image:")
     labelCurrImg.place(x= 290, y=80)
-    scaleCurrImg = tkinter.Scale(root, from_=1, to=15, orient = tkinter.HORIZONTAL, command=partial(SetImage, imageDisplay))
+    scaleCurrImg = tkinter.Scale(root, from_=1, to=1, orient = tkinter.HORIZONTAL, command=partial(SetImage, imageDisplay))
     scaleCurrImg.place(x = 380, y=60)
 
     # Draws the result image initial is copy of first from image set
