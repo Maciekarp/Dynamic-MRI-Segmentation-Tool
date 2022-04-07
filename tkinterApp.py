@@ -1,4 +1,4 @@
-#!/e/Anaconda3/python
+
 #####
 # By: Maciej Walczak  
 # This is a simple python tkinter app used to highlight the
@@ -17,8 +17,6 @@ from functools import partial
 #from matplotlib.pyplot import show
 import numpy as np
 #from sklearn.preprocessing import scale
-
-chosenImagePaths = []
 
 resultPNG = []
 
@@ -136,10 +134,12 @@ def ResetInputsGui():
 # Gets the files selected by the user and generates the image list and raw image list from the files
 # this also runs the acrivator function allowing the user to 
 def BrowseFiles():
-    global chosenImagePaths
     global rawImages
     global imageList
+    chosenImagePaths = []
     chosenImagePaths = tkinter.filedialog.askopenfiles(title = "Select Files")
+    if len(chosenImagePaths) == 0:
+        return
     imageList.clear()
     rawImages.clear()
     # Generates Image list and raw image list in a sorta sloppy way
@@ -162,7 +162,8 @@ def SaveToFile():
         initialfile="result.png", 
         defaultextension=".png",
     )
-    resultPNG.save(file.name, "PNG")
+    if file is not None:
+        resultPNG.save(file.name, "PNG")
     
 if __name__ == "__main__":
     
