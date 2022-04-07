@@ -4,6 +4,8 @@ This is a simple python tkinter app used to aid in image analysis
 # How To run:
 If you have python installed and all the correct packages simply running tkinterApp.py with python should work
 
+If you are on windows you could try running the run.bat file
+
 To make sure you have python installed open a command prompt and run:
 
 `python --version`
