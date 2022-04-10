@@ -9,9 +9,7 @@
 #from glob import glob
 import tkinter
 from tkinter import filedialog
-#from turtle import color
-#from unittest import result
-from PIL import ImageTk, Image
+from PIL import ImageTk, Image, ImageSequence
 #import os
 from functools import partial
 #from matplotlib import image
@@ -191,29 +189,28 @@ def BrowseFiles():
     # Generates Image list and raw image list in a sorta sloppy way
     for im in chosenImagePaths:
         fileType = im.split('.', 1)[1]
-        #print(fileType)
         
         # if the file is tiff check if it is a multiframe file and inset each frame as an image
         if fileType == "tiff" or fileType == "tif":
             tiffStack = Image.open(im)
-
-            for i in range(tiffStack.n_frames):
-                print(tiffStack.n_frames)
-                print(tiffStack.tell())
-                curr = tiffStack.seek(tiffStack.tell() + i + 1)
-                print(curr)
-                print()
+            print(tiffStack.info)
+            if tiffStack.info.get("compression") != "raw":
+                Alert("Warning the tiff file compression is not raw this may crash the app")
+            print(tiffStack.n_frames)
+            for i in range (tiffStack.n_frames):
+                tiffStack.seek(i)
+                curr = tiffStack
                 rawImages.append(np.array(curr))
-                #curr = curr.resize((int(curr.width * currImageScale), int(curr.height * currImageScale)))
+                curr = curr.resize((int(curr.width * currImageScale), int(curr.height * currImageScale)))
                 imageList.append(ImageTk.PhotoImage(curr))
-                
+
         else:
             curr = Image.open(im)
             rawImages.append(np.array(curr))
             curr = curr.resize((int(curr.width * currImageScale), int(curr.height * currImageScale)))
             imageList.append(ImageTk.PhotoImage(curr))
     
-    totalNum.set(str(len(rawImages[0]) * len(rawImages[0][0])))
+    #totalNum.set(str(len(rawImages[0]) * len(rawImages[0][0])))
     ResetInputsGui()
 
 
@@ -249,15 +246,6 @@ if __name__ == "__main__":
     # Creates button to start file explorer for images needed to be analyzed
     buttonGetPNGs = tkinter.Button(root, text="Find Images", command=BrowseFiles)
     buttonGetPNGs.place(x= 300, y = 30)
-
-    # creates an image list from the selection
-    # and a list of values to be edited
-    #for path in imagePaths:
-    #    currImage = Image.open(path)
-    #    rawImages.append(np.array(currImage))
-    #    currImage = currImage.resize((int(currImage.width * currImageScale), int(currImage.height * currImageScale)))
-    #    imageList.append(ImageTk.PhotoImage(currImage))
-    
 
     # Draws the orginial image set 
     imageDisplay = tkinter.Label(root)#, image = imageList[0])
