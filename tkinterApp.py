@@ -1,14 +1,15 @@
 
 #####
 # By: Maciej Walczak  
-# This is a simple python tkinter app used to highlight the
-#
+# This is a simple python tkinter app used to aid in highlighting the difference 
+# between a chosen baseline and chosen slices
 #
 #####
 # importing required packages
 #from glob import glob
 import tkinter
 from tkinter import filedialog
+#from turtle import color
 #from unittest import result
 from PIL import ImageTk, Image
 #import os
@@ -59,6 +60,41 @@ def ValidateInput():
 
     return True
 
+
+# helper function used to blend two colors by a factor and returns a color
+# Takes a factor and two rgb values a input returning the blended color
+def BlendRGB(factor, color1 = [0,0,0], color2 = [255, 255, 255]):
+    
+    c1 = np.array(color1)
+    c2 = np.array(color2)
+    
+    result = c1 * factor + c2 * (1 - factor)
+    return result.astype(np.uint8)
+    red = 0
+    green = 0
+    blue = 0
+    if color1[0] > color2[0]:
+        red = color2[0] + (factor * (color1[0] - color2[0]))
+    else:
+        red = color1[0] + (factor * (color2[0] - color1[0]))
+        
+    if color1[1] > color2[1]:
+        green = color2[1] + (factor * (color1[1] - color2[1]))
+    else:
+        green = color1[1] + (factor * (color2[1] - color1[1]))
+        
+    if color1[2] > color2[2]:
+        blue = color2[2] + (factor * (color1[2] - color2[2]))
+    else:
+        blue = color1[2] + (factor * (color2[2] - color1[2]))
+
+    red = int(red)
+    green = int(green)
+    blue = int(blue)
+
+    return np.array([red, green, blue], dtype=np.uint8)
+
+
 # calculates the difference and highlights the pixels that match the specifications
 def CalculateDiff(target):
     if not ValidateInput():
@@ -71,6 +107,7 @@ def CalculateDiff(target):
         baseLine = baseLine + (rawImages[i] / currBase.get())
     baseLine = baseLine.astype(int)
     baseLine = baseLine.astype(np.uint8)
+    totalNum.set(str(np.count_nonzero(baseLine != 0)))
 
     # populates diffMaps with 2d arrays of the difference between the baseline and current image
     # negative values are set to 0 difference
@@ -80,12 +117,6 @@ def CalculateDiff(target):
         curr = baseLine.astype(np.int16) - rawImages[i]
         curr = curr.clip(min = 0)
         diffMaps.append(curr.astype(np.uint8))
-    
-    #for i in range(currBase.get(), len(rawImages)):
-    #    curr = baseLine.astype(np.int16) - rawImages[i]
-    #    curr = curr.clip(min = 0)
-    #    diffMaps.append(curr.astype(np.uint8))
-
 
     # only shows the difference that is sufficient
     for i in range(len(diffMaps)):
@@ -109,9 +140,21 @@ def CalculateDiff(target):
         #resultMap = resultMap + diffMaps[i]
     resultNum.set(str(np.count_nonzero(resultMap == 255)))
 
-
+    for iy, ix in np.ndindex(resultMap.shape):
+        for i in range(int(fromImgNum.get()) - 1, int(toImgNum.get())):
+            if resultMap[iy][ix] != 0:
+                resultMap[iy][ix] = min(resultMap[iy][ix], rawImages[i][iy][ix])
+    
     # draws the resulting image 
-    im = Image.fromarray(resultMap)
+    im = Image.fromarray(resultMap).convert('RGB')
+    resultRGB = np.array(im)
+    for iy, ix, iz in np.ndindex(resultRGB.shape):
+        if resultMap[iy][ix] != 0:
+            factor = resultMap[iy][ix] / baseLine[iy][ix]
+            resultRGB[iy][ix] = BlendRGB(factor,color1=[0,0,0], color2=[255,0,0])
+    
+
+    im = Image.fromarray(resultRGB)
     global resultPNG
     resultPNG = im
     im = im.resize((int(im.width * currImageScale), int(im.height * currImageScale)))
@@ -137,18 +180,40 @@ def BrowseFiles():
     global rawImages
     global imageList
     chosenImagePaths = []
-    chosenImagePaths = tkinter.filedialog.askopenfiles(title = "Select Files")
+    chosenImagePaths = tkinter.filedialog.askopenfilenames(title = "Select Files")
+    
+    # if no files are chosen does not do any changes
     if len(chosenImagePaths) == 0:
         return
+
     imageList.clear()
     rawImages.clear()
     # Generates Image list and raw image list in a sorta sloppy way
     for im in chosenImagePaths:
-        #print(im.name)
-        curr = Image.open(im.name)
-        rawImages.append(np.array(curr))
-        curr = curr.resize((int(curr.width * currImageScale), int(curr.height * currImageScale)))
-        imageList.append(ImageTk.PhotoImage(curr))
+        fileType = im.split('.', 1)[1]
+        #print(fileType)
+        
+        # if the file is tiff check if it is a multiframe file and inset each frame as an image
+        if fileType == "tiff" or fileType == "tif":
+            tiffStack = Image.open(im)
+
+            for i in range(tiffStack.n_frames):
+                print(tiffStack.n_frames)
+                print(tiffStack.tell())
+                curr = tiffStack.seek(tiffStack.tell() + i + 1)
+                print(curr)
+                print()
+                rawImages.append(np.array(curr))
+                #curr = curr.resize((int(curr.width * currImageScale), int(curr.height * currImageScale)))
+                imageList.append(ImageTk.PhotoImage(curr))
+                
+        else:
+            curr = Image.open(im)
+            rawImages.append(np.array(curr))
+            curr = curr.resize((int(curr.width * currImageScale), int(curr.height * currImageScale)))
+            imageList.append(ImageTk.PhotoImage(curr))
+    
+    totalNum.set(str(len(rawImages[0]) * len(rawImages[0][0])))
     ResetInputsGui()
 
 
@@ -178,7 +243,7 @@ if __name__ == "__main__":
 
     # creating main window
     root = tkinter.Tk()
-    root.geometry('700x400')
+    root.geometry('800x400')
     root.title("App")
 
     # Creates button to start file explorer for images needed to be analyzed
@@ -244,7 +309,16 @@ if __name__ == "__main__":
     resultNum = tkinter.StringVar()
     resultNum.set("NaN")
     labelResultingNum = tkinter.Entry(root, textvariable=resultNum,width=5 ,state= tkinter.DISABLED)
-    labelResultingNum.place(x=610, y=320)
+    labelResultingNum.place(x=600, y=320)
+
+    # Draws total number of pixels in image
+    labelTotalNumTitle = tkinter.Label(root, text="Total Pixels:")
+    labelTotalNumTitle.place(x=630, y=320)
+    totalNum = tkinter.StringVar()
+    totalNum.set("NaN")
+    labelTotalNum = tkinter.Entry(root, textvariable=totalNum,width=5 ,state= tkinter.DISABLED)
+    labelTotalNum.place(x=700, y=320)
+
 
     # Draws buttons
     calculateButton = tkinter.Button(root, text="Calculate", command=partial(CalculateDiff, imageFinal))
