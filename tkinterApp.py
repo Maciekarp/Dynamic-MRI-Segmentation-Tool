@@ -1,4 +1,3 @@
-
 #####
 # By: Maciej Walczak  
 # This is a simple python tkinter app used to aid in highlighting the difference 
@@ -12,18 +11,15 @@ from PIL import ImageTk, Image
 from functools import partial
 import numpy as np
 
+# list of file formats that are accepted by this program
+# more may work without much implementation but these are the ones that have been tested
 ACCEPTED_FILE_FORMATS = ["tiff", "tif", "png", "ppm", "jpeg"]
 
-resultPNG = []
+rawImages = [] # list of images in their raw form used for scaling and calculations based off them 
+resultPNG = [] # the resulting image generated 
 
-rawImages = []
-baseLine = []
-resultImage = []
-diffMaps = []
-resultMap = []
-
-imageList = []
-
+# the currTK variables are the images that are currently on display using tkinter that must be in
+# accessible to be viewed by tkinter
 currTKImage = []
 currTKResult = []
 
@@ -34,13 +30,7 @@ def ReloadImages():
     if currTKResult != []:
         imageFinal.config(image=currTKResult)
     root.after(10, ReloadImages)
-    
-# used as a helper function to set text while being copyable
-#def SetText(widgit, message):
-#    widgit.config(state='normal')
-#    widgit.config(text=message)
-#    widgit.config(state='disabled')
-#
+
 # changes the image being presented to the one on the slider
 def SetImage(val):
     im = Image.fromarray(rawImages[int(val) - 1])
@@ -49,6 +39,7 @@ def SetImage(val):
     currTKImage = ImageTk.PhotoImage(im)
     imageDisplay.config(image= currTKImage)
 
+# Wrapper to allow Slider to call same function
 def ScaleSizeSlider(val):
     ScaleSize()
 
@@ -63,13 +54,9 @@ def ScaleSize():
     im = im.resize((int(im.width * currImageScale.get()), int(im.height * currImageScale.get())))
     currTKImage = ImageTk.PhotoImage(im)
     imageDisplay.config(image= currTKImage)
-
-    #imageDisplay.pack(side="left")
     
-
     # if the result image is not rendered do not scale it
     if resultPNG == []:
-        #imageFinal.pack(side="left")
         return
 
     resultIM = resultPNG
@@ -77,7 +64,6 @@ def ScaleSize():
     resultIM = resultIM.resize((int(resultIM.width * currImageScale.get()), int(resultIM.height * currImageScale.get())))
     currTKResult = ImageTk.PhotoImage(resultIM)
     imageFinal.config(image=currTKResult)
-    #imageFinal.pack(side="left")
 
 # used to show a message to the user in a new window
 def Alert(message):
@@ -93,10 +79,10 @@ def ValidateInput():
     if not toImgNum.get().isdigit():
         Alert("\"To\" value must be a number")
         return False
-    if int(fromImgNum.get()) < 1 or int(fromImgNum.get()) > len(imageList):
+    if int(fromImgNum.get()) < 1 or int(fromImgNum.get()) > len(rawImages):
         Alert("\"From\" value must be greater than 0 and less than the number of images")
         return False
-    if int(toImgNum.get()) < 1 or int(toImgNum.get()) > len(imageList):
+    if int(toImgNum.get()) < 1 or int(toImgNum.get()) > len(rawImages):
         Alert("\"To\" value must be greater than 0 and less than the number of images")
         return False
     if int(toImgNum.get()) < int(fromImgNum.get()):
@@ -138,7 +124,6 @@ def BlendRGB(factor, color1 = [0,0,0], color2 = [255, 255, 255]):
 
     return np.array([red, green, blue], dtype=np.uint8)
 
-
 # calculates the difference and highlights the pixels that match the specifications
 def CalculateDiff():
     global currImageScale
@@ -146,7 +131,6 @@ def CalculateDiff():
         return
 
     # calculates the baseline
-    global baseLine
     baseLine = rawImages[0] / currBase.get()
     for i in range(1, currBase.get()):
         baseLine = baseLine + (rawImages[i] / currBase.get())
@@ -156,8 +140,8 @@ def CalculateDiff():
 
     # populates diffMaps with 2d arrays of the difference between the baseline and current image
     # negative values are set to 0 difference
-    global diffMaps
-    diffMaps.clear()
+    
+    diffMaps = []
     for i in range(int(fromImgNum.get()) - 1, int(toImgNum.get())):
         curr = baseLine.astype(np.int16) - rawImages[i]
         curr = curr.clip(min = 0)
@@ -173,7 +157,6 @@ def CalculateDiff():
 
 
     # Gets the resulting image that displays where the conditions are true
-    global resultMap
     resultMap = diffMaps[0]
     for i in range(1, len(diffMaps)):
         for iy, ix in np.ndindex(diffMaps[i].shape):
@@ -182,7 +165,6 @@ def CalculateDiff():
             else:
                 resultMap[iy][ix] = 0
 
-        #resultMap = resultMap + diffMaps[i]
     resultNum.set(str(np.count_nonzero(resultMap == 255)))
 
     for iy, ix in np.ndindex(resultMap.shape):
@@ -202,28 +184,23 @@ def CalculateDiff():
     im = Image.fromarray(resultRGB)
     global resultPNG
     resultPNG = im
-    im = im.resize((int(im.width * currImageScale.get()), int(im.height * currImageScale.get())))
-    global resultImage 
-    resultImage = ImageTk.PhotoImage(im)
+    #im = im.resize((int(im.width * currImageScale.get()), int(im.height * currImageScale.get())))
 
     ScaleSize()
-
 
 # used as a helper function resetting the UI and 
 def ResetInputsGui():
     # Updates the current image scale and display
-    scaleCurrImg.config(to=len(imageList))
-    imageDisplay.config(image=imageList[0])
+    scaleCurrImg.config(to=len(rawImages))
+    ScaleSize()
 
     # Updates the Base scale
-    scaleBase.config(to=len(imageList))
+    scaleBase.config(to=len(rawImages))
     
-
 # Gets the files selected by the user and generates the image list and raw image list from the files
 # this also runs the acrivator function allowing the user to 
 def BrowseFiles():
     global rawImages
-    global imageList
     global currImageScale
     chosenImagePaths = []
     chosenImagePaths = tkinter.filedialog.askopenfilenames(title = "Select Files")
@@ -232,7 +209,6 @@ def BrowseFiles():
     if len(chosenImagePaths) == 0:
         return
     loadedNum.set(len(chosenImagePaths))
-    #SetText(labelImagesNum,str(len(chosenImagePaths)))
 
     # makes sure all files are in the correct file format
     for im in chosenImagePaths:
@@ -240,7 +216,6 @@ def BrowseFiles():
             Alert("\"." + im.split('.', 1)[1] + "\" is not a supported file format")
             return
 
-    imageList.clear()
     rawImages.clear()
     # Generates Image list and raw image list in a sorta sloppy way
     for im in chosenImagePaths:
@@ -252,23 +227,18 @@ def BrowseFiles():
             #print(tiffStack.info)
             if tiffStack.info.get("compression") != "raw":
                 Alert("Warning the tiff file compression is not raw this may crash the app")
-            #print(tiffStack.n_frames)
             for i in range (tiffStack.n_frames):
                 tiffStack.seek(i)
                 curr = tiffStack
                 rawImages.append(np.array(curr))
                 curr = curr.resize((int(curr.width * currImageScale.get()), int(curr.height * currImageScale.get())))
-                imageList.append(ImageTk.PhotoImage(curr))
 
         else:
             curr = Image.open(im)
             rawImages.append(np.array(curr))
             curr = curr.resize((int(curr.width * currImageScale.get()), int(curr.height * currImageScale.get())))
-            imageList.append(ImageTk.PhotoImage(curr))
     
-    #totalNum.set(str(len(rawImages[0]) * len(rawImages[0][0])))
     ResetInputsGui()
-
 
 # saves the generated image to the filename specified
 def SaveToFile():
@@ -284,56 +254,20 @@ def SaveToFile():
         resultPNG.save(file.name, "PNG")
 
 if __name__ == "__main__":
-    
-    # hard coded paths used for debugging
-    #imagePaths = []
-    #for i in range(15):
-    #    if i < 10:
-    #        imagePaths.append('For quantification png/acute intervention - 20220404_164345_pw040422_BBBO_2_acute_intervention_1_1 - seq no  8 -1000'+str(i)+'.png')
-    #    else:
-    #        imagePaths.append('For quantification png/acute intervention - 20220404_164345_pw040422_BBBO_2_acute_intervention_1_1 - seq no  8 -100'+str(i)+'.png')
-    
-
     # creating main window
     root = tkinter.Tk()
     root.geometry('900x400')
-    root.title("App")
+    root.title("Tkinter App")
 
+    # coordinates for where the top left corner of the image viewing modules will generate
     ciX = 230
     ciY = 60
 
+
+
+    # The Module that holds the sliders and input for the variables GUI
     lfAnnalysis = tkinter.LabelFrame(root, text="Process Variables")
     lfAnnalysis.grid(row=0,column=0, padx=(10, 0), sticky="n")
-
-    #middleArea = tkinter.Label(root)
-    #middleArea.grid(row=0, column=1, sticky="n")
-
-    lfImageInput = tkinter.LabelFrame(root, text="Import Files")
-    lfImageInput.grid(row=0, column=1, sticky="nw")
-
-    lfSave= tkinter.LabelFrame(root, text="Result")
-    lfSave.grid(row=0, column=2, sticky="n")
-    #lfImageDisplays = tkinter.Label(middleArea)#, text="Images")
-    #lfImageDisplays.grid(row=1, column=0, sticky="nw")
-
-    # Creates button to start file explorer for images needed to be analyzed
-    buttonGetPNGs = tkinter.Button(lfImageInput, text="Find Images", command=BrowseFiles)
-    buttonGetPNGs.grid(row=0, column=3, padx=(10,100), pady=(0,10))
-
-    # Label informing the amount of images loaded
-    labelImagesLoaded = tkinter.Label(lfImageInput, text="Images Loaded:")
-    labelImagesLoaded.grid(row=0, column=0)
-    loadedNum = tkinter.StringVar()
-    loadedNum.set("NaN")
-    labelImagesNum = tkinter.Entry(lfImageInput, textvariable=loadedNum, width=5, state='readonly')
-    labelImagesNum.grid(row=0, column=1)
-
-
-    labelCurrImg = tkinter.Label(root, text="Current Image:")
-    labelCurrImg.place(x=ciX+0, y=ciY+20)
-    currImageIndex = tkinter.IntVar()
-    scaleCurrImg = tkinter.Scale(root, from_=1, to=1, variable=currImageIndex, orient = tkinter.HORIZONTAL, command=SetImage)
-    scaleCurrImg.place(x=ciX+90, y=ciY+0)
 
     # Draws Base scale and label
     baseLabel = tkinter.Label(lfAnnalysis, text="Base Count:")
@@ -351,6 +285,7 @@ if __name__ == "__main__":
     scaleDiff = tkinter.Scale(lfAnnalysis, variable=currDiff, from_=0, to=100, orient= tkinter.HORIZONTAL)
     scaleDiff.grid(row=1,column=1)
 
+    # Sub module used to select which images to check
     lfCheck = tkinter.LabelFrame(lfAnnalysis, text = "Check Images")
     lfCheck.grid(row=2, column=0, columnspan=2)
 
@@ -365,6 +300,34 @@ if __name__ == "__main__":
     toImgNum = tkinter.StringVar()
     inputFrom = tkinter.Entry(lfCheck, textvariable=toImgNum, width=5)
     inputFrom.grid(row=0, column=3, padx=(0, 10), pady=(10,10))
+
+    # Draws buttons
+    calculateButton = tkinter.Button(lfAnnalysis, text="Calculate", command=CalculateDiff)
+    calculateButton.grid(row=3, column=1, pady=(10, 10), padx = (10, 0))
+
+
+
+    # Module that contains ability to load files holds information about them
+    lfImageInput = tkinter.LabelFrame(root, text="Import Files")
+    lfImageInput.grid(row=0, column=1, sticky="nw")
+
+    # Creates button to start file explorer for images needed to be analyzed
+    buttonGetPNGs = tkinter.Button(lfImageInput, text="Find Images", command=BrowseFiles)
+    buttonGetPNGs.grid(row=0, column=3, padx=(10,100), pady=(0,10))
+
+    # Label informing the amount of images loaded
+    labelImagesLoaded = tkinter.Label(lfImageInput, text="Images Loaded:")
+    labelImagesLoaded.grid(row=0, column=0)
+    loadedNum = tkinter.StringVar()
+    loadedNum.set("NaN")
+    labelImagesNum = tkinter.Entry(lfImageInput, textvariable=loadedNum, width=5, state='readonly')
+    labelImagesNum.grid(row=0, column=1)
+
+
+
+    # Module that contains ability to save results and holds information about result image
+    lfSave= tkinter.LabelFrame(root, text="Result")
+    lfSave.grid(row=0, column=2, sticky="n")
 
     # Draws number of pixels that fulfull the requirement
     labelResultingNumTitle = tkinter.Label(lfSave, text="Number of Pixels:")
@@ -382,8 +345,20 @@ if __name__ == "__main__":
     labelTotalNum = tkinter.Entry(lfSave, textvariable=totalNum,width=5 ,state='readonly')
     labelTotalNum.grid(row=0, column=3)
 
+    saveButton = tkinter.Button(lfSave, text="Save to file", command=SaveToFile)
+    saveButton.grid(row=0, column=4, pady=(0,10), padx=(10,10))
 
-    # Draws size scale
+
+
+
+    # Draws current image scale and its label
+    labelCurrImg = tkinter.Label(root, text="Current Image:")
+    labelCurrImg.place(x=ciX+0, y=ciY+20)
+    currImageIndex = tkinter.IntVar()
+    scaleCurrImg = tkinter.Scale(root, from_=1, to=1, variable=currImageIndex, orient = tkinter.HORIZONTAL, command=SetImage)
+    scaleCurrImg.place(x=ciX+90, y=ciY+0)
+    
+    # Draws size scale and its label
     currImageScale = tkinter.DoubleVar()
     currImageScale.set(1.0)
     scaleImage = tkinter.Scale(root, variable=currImageScale, from_=0.1, to=5, orient=tkinter.VERTICAL, resolution=0.05, command=ScaleSizeSlider)
@@ -391,15 +366,7 @@ if __name__ == "__main__":
     labelImageScale = tkinter.Label(root, text="Scale:")
     labelImageScale.place(x=ciX+0, y=ciY+90)
 
-
-    # Draws buttons
-    calculateButton = tkinter.Button(lfAnnalysis, text="Calculate", command=CalculateDiff)
-    calculateButton.grid(row=3, column=1, pady=(10, 10), padx = (10, 0))
-
-
-    saveButton = tkinter.Button(lfSave, text="Save to file", command=SaveToFile)
-    saveButton.grid(row=0, column=4, pady=(0,10), padx=(10,10))
-
+    # Module managing location of loaded and result images
     lfImages = tkinter.Label(root)
     lfImages.place(x=ciX+80, y=ciY+40)
     
@@ -410,6 +377,8 @@ if __name__ == "__main__":
     imageFinal = tkinter.Label(lfImages)
     imageFinal.pack(side="left")
 
-    # running the application
+
+
+    # running the application and the function being executed in parallel
     root.after(100, ReloadImages)
     root.mainloop()
