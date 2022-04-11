@@ -6,20 +6,16 @@
 #
 #####
 # importing required packages
-#from glob import glob
 import tkinter
 from tkinter import filedialog
-from PIL import ImageTk, Image, ImageSequence
-#import os
+from PIL import ImageTk, Image
 from functools import partial
-#from matplotlib import image
-#from matplotlib.pyplot import show
 import numpy as np
-#from sklearn.preprocessing import scale
+
+ACCEPTED_FILE_FORMATS = ["tiff", "tif", "png", "ppm", "jpeg"]
 
 resultPNG = []
 
-currImageScale = 2
 rawImages = []
 baseLine = []
 resultImage = []
@@ -28,9 +24,60 @@ resultMap = []
 
 imageList = []
 
+currTKImage = []
+currTKResult = []
+
+# used to fix race condition of the scale image function
+def ReloadImages():
+    if currTKImage != []:
+        imageDisplay.config(image= currTKImage)
+    if currTKResult != []:
+        imageFinal.config(image=currTKResult)
+    root.after(10, ReloadImages)
+    
+# used as a helper function to set text while being copyable
+#def SetText(widgit, message):
+#    widgit.config(state='normal')
+#    widgit.config(text=message)
+#    widgit.config(state='disabled')
+#
 # changes the image being presented to the one on the slider
-def SetImage(target, val):
-    target.config(image = imageList[int(val) - 1])
+def SetImage(val):
+    im = Image.fromarray(rawImages[int(val) - 1])
+    global currTKImage
+    im = im.resize((int(im.width * currImageScale.get()), int(im.height * currImageScale.get())))
+    currTKImage = ImageTk.PhotoImage(im)
+    imageDisplay.config(image= currTKImage)
+
+def ScaleSizeSlider(val):
+    ScaleSize()
+
+# scales the size of the images and location based off the image size value
+def ScaleSize():
+    # if no raw images exist dont do anything
+    if rawImages == []:
+        return 
+    
+    im = Image.fromarray(rawImages[int(currImageIndex.get()) - 1])
+    global currTKImage
+    im = im.resize((int(im.width * currImageScale.get()), int(im.height * currImageScale.get())))
+    currTKImage = ImageTk.PhotoImage(im)
+    imageDisplay.config(image= currTKImage)
+
+    #imageDisplay.pack(side="left")
+    
+
+    # if the result image is not rendered do not scale it
+    if resultPNG == []:
+        #imageFinal.pack(side="left")
+        return
+
+    resultIM = resultPNG
+    global currTKResult
+    resultIM = resultIM.resize((int(resultIM.width * currImageScale.get()), int(resultIM.height * currImageScale.get())))
+    currTKResult = ImageTk.PhotoImage(resultIM)
+    imageFinal.config(image=currTKResult)
+    #imageFinal.pack(side="left")
 
 # used to show a message to the user in a new window
 def Alert(message):
@@ -57,7 +104,6 @@ def ValidateInput():
         return False
 
     return True
-
 
 # helper function used to blend two colors by a factor and returns a color
 # Takes a factor and two rgb values a input returning the blended color
@@ -94,7 +140,8 @@ def BlendRGB(factor, color1 = [0,0,0], color2 = [255, 255, 255]):
 
 
 # calculates the difference and highlights the pixels that match the specifications
-def CalculateDiff(target):
+def CalculateDiff():
+    global currImageScale
     if not ValidateInput():
         return
 
@@ -155,11 +202,11 @@ def CalculateDiff(target):
     im = Image.fromarray(resultRGB)
     global resultPNG
     resultPNG = im
-    im = im.resize((int(im.width * currImageScale), int(im.height * currImageScale)))
+    im = im.resize((int(im.width * currImageScale.get()), int(im.height * currImageScale.get())))
     global resultImage 
     resultImage = ImageTk.PhotoImage(im)
 
-    target.config(image = resultImage)
+    ScaleSize()
 
 
 # used as a helper function resetting the UI and 
@@ -177,12 +224,21 @@ def ResetInputsGui():
 def BrowseFiles():
     global rawImages
     global imageList
+    global currImageScale
     chosenImagePaths = []
     chosenImagePaths = tkinter.filedialog.askopenfilenames(title = "Select Files")
     
     # if no files are chosen does not do any changes
     if len(chosenImagePaths) == 0:
         return
+    loadedNum.set(len(chosenImagePaths))
+    #SetText(labelImagesNum,str(len(chosenImagePaths)))
+
+    # makes sure all files are in the correct file format
+    for im in chosenImagePaths:
+        if (im.split('.', 1)[1]).lower() not in ACCEPTED_FILE_FORMATS:
+            Alert("\"." + im.split('.', 1)[1] + "\" is not a supported file format")
+            return
 
     imageList.clear()
     rawImages.clear()
@@ -193,21 +249,21 @@ def BrowseFiles():
         # if the file is tiff check if it is a multiframe file and inset each frame as an image
         if fileType == "tiff" or fileType == "tif":
             tiffStack = Image.open(im)
-            print(tiffStack.info)
+            #print(tiffStack.info)
             if tiffStack.info.get("compression") != "raw":
                 Alert("Warning the tiff file compression is not raw this may crash the app")
-            print(tiffStack.n_frames)
+            #print(tiffStack.n_frames)
             for i in range (tiffStack.n_frames):
                 tiffStack.seek(i)
                 curr = tiffStack
                 rawImages.append(np.array(curr))
-                curr = curr.resize((int(curr.width * currImageScale), int(curr.height * currImageScale)))
+                curr = curr.resize((int(curr.width * currImageScale.get()), int(curr.height * currImageScale.get())))
                 imageList.append(ImageTk.PhotoImage(curr))
 
         else:
             curr = Image.open(im)
             rawImages.append(np.array(curr))
-            curr = curr.resize((int(curr.width * currImageScale), int(curr.height * currImageScale)))
+            curr = curr.resize((int(curr.width * currImageScale.get()), int(curr.height * currImageScale.get())))
             imageList.append(ImageTk.PhotoImage(curr))
     
     #totalNum.set(str(len(rawImages[0]) * len(rawImages[0][0])))
@@ -226,7 +282,7 @@ def SaveToFile():
     )
     if file is not None:
         resultPNG.save(file.name, "PNG")
-    
+
 if __name__ == "__main__":
     
     # hard coded paths used for debugging
@@ -240,83 +296,120 @@ if __name__ == "__main__":
 
     # creating main window
     root = tkinter.Tk()
-    root.geometry('800x400')
+    root.geometry('900x400')
     root.title("App")
 
-    # Creates button to start file explorer for images needed to be analyzed
-    buttonGetPNGs = tkinter.Button(root, text="Find Images", command=BrowseFiles)
-    buttonGetPNGs.place(x= 300, y = 30)
+    ciX = 230
+    ciY = 60
 
-    # Draws the orginial image set 
-    imageDisplay = tkinter.Label(root)#, image = imageList[0])
-    imageDisplay.place(x=300, y=100)
+    lfAnnalysis = tkinter.LabelFrame(root, text="Process Variables")
+    lfAnnalysis.grid(row=0,column=0, padx=(10, 0), sticky="n")
+
+    #middleArea = tkinter.Label(root)
+    #middleArea.grid(row=0, column=1, sticky="n")
+
+    lfImageInput = tkinter.LabelFrame(root, text="Import Files")
+    lfImageInput.grid(row=0, column=1, sticky="nw")
+
+    lfSave= tkinter.LabelFrame(root, text="Result")
+    lfSave.grid(row=0, column=2, sticky="n")
+    #lfImageDisplays = tkinter.Label(middleArea)#, text="Images")
+    #lfImageDisplays.grid(row=1, column=0, sticky="nw")
+
+    # Creates button to start file explorer for images needed to be analyzed
+    buttonGetPNGs = tkinter.Button(lfImageInput, text="Find Images", command=BrowseFiles)
+    buttonGetPNGs.grid(row=0, column=3, padx=(10,100), pady=(0,10))
+
+    # Label informing the amount of images loaded
+    labelImagesLoaded = tkinter.Label(lfImageInput, text="Images Loaded:")
+    labelImagesLoaded.grid(row=0, column=0)
+    loadedNum = tkinter.StringVar()
+    loadedNum.set("NaN")
+    labelImagesNum = tkinter.Entry(lfImageInput, textvariable=loadedNum, width=5, state='readonly')
+    labelImagesNum.grid(row=0, column=1)
+
 
     labelCurrImg = tkinter.Label(root, text="Current Image:")
-    labelCurrImg.place(x= 290, y=80)
-    scaleCurrImg = tkinter.Scale(root, from_=1, to=1, orient = tkinter.HORIZONTAL, command=partial(SetImage, imageDisplay))
-    scaleCurrImg.place(x = 380, y=60)
-
-    # Draws the result image initial is copy of first from image set
-    imageFinal = tkinter.Label(root)#, image = imageList[0])
-    imageFinal.place(x = 500, y = 100)
+    labelCurrImg.place(x=ciX+0, y=ciY+20)
+    currImageIndex = tkinter.IntVar()
+    scaleCurrImg = tkinter.Scale(root, from_=1, to=1, variable=currImageIndex, orient = tkinter.HORIZONTAL, command=SetImage)
+    scaleCurrImg.place(x=ciX+90, y=ciY+0)
 
     # Draws Base scale and label
-    baseLabel = tkinter.Label(root, text="Base Count:")
-    baseLabel.place(x=5, y=20)
+    baseLabel = tkinter.Label(lfAnnalysis, text="Base Count:")
+    baseLabel.grid(row=0,column=0, pady=(15,0))
     currBase = tkinter.IntVar()
-    currBase.set(3)
-    scaleBase = tkinter.Scale(root, variable=currBase, from_=1, to=5, orient = tkinter.HORIZONTAL)
-    scaleBase.place(x=120, y =0)
+    currBase.set(1)
+    scaleBase = tkinter.Scale(lfAnnalysis, variable=currBase, from_=1, to=1, orient = tkinter.HORIZONTAL)
+    scaleBase.grid(row=0,column=1)
     
     # Draws Difference scale and label
-    diffLabel = tkinter.Label(root, text="Difference amount:")
-    diffLabel.place(x=5, y=60)
+    diffLabel = tkinter.Label(lfAnnalysis, text="Difference amount:")
+    diffLabel.grid(row=1,column=0, pady=(15,0))
     currDiff = tkinter.IntVar()
     currDiff.set(40)
-    scaleDiff = tkinter.Scale(root, variable=currDiff, from_=0, to=100, orient= tkinter.HORIZONTAL)
-    scaleDiff.place(x=120, y=40)
+    scaleDiff = tkinter.Scale(lfAnnalysis, variable=currDiff, from_=0, to=100, orient= tkinter.HORIZONTAL)
+    scaleDiff.grid(row=1,column=1)
 
+    lfCheck = tkinter.LabelFrame(lfAnnalysis, text = "Check Images")
+    lfCheck.grid(row=2, column=0, columnspan=2)
 
     # Draws Check Images UI
-    labelCheckTitle = tkinter.Label(root, text="Check Images:")
-    labelCheckTitle.place(x=5, y=100)
-    labelCheckFrom = tkinter.Label(root, text="From:")
-    labelCheckFrom.place(x=40, y=120)
-    labelCheckTo = tkinter.Label(root, text="To:")
-    labelCheckTo.place(x=120, y=120)
+    labelCheckFrom = tkinter.Label(lfCheck, text="From:")
+    labelCheckFrom.grid(row=0, column=0)
+    labelCheckTo = tkinter.Label(lfCheck, text="To:")
+    labelCheckTo.grid(row=0, column=2)
     fromImgNum = tkinter.StringVar()
-    inputFrom = tkinter.Entry(root, textvariable=fromImgNum, width=5)
-    inputFrom.place(x=80 ,y=120)
+    inputFrom = tkinter.Entry(lfCheck, textvariable=fromImgNum, width=5)
+    inputFrom.grid(row=0, column=1)
     toImgNum = tkinter.StringVar()
-    inputFrom = tkinter.Entry(root, textvariable=toImgNum, width=5)
-    inputFrom.place(x=140 ,y=120)
+    inputFrom = tkinter.Entry(lfCheck, textvariable=toImgNum, width=5)
+    inputFrom.grid(row=0, column=3, padx=(0, 10), pady=(10,10))
 
-    # Draws number of pixels that are 
-    labelResultingNumTitle = tkinter.Label(root, text="Number of Pixels:")
-    labelResultingNumTitle.place(x=500, y=320)
+    # Draws number of pixels that fulfull the requirement
+    labelResultingNumTitle = tkinter.Label(lfSave, text="Number of Pixels:")
+    labelResultingNumTitle.grid(row=0, column=0)
     resultNum = tkinter.StringVar()
     resultNum.set("NaN")
-    labelResultingNum = tkinter.Entry(root, textvariable=resultNum,width=5 ,state= tkinter.DISABLED)
-    labelResultingNum.place(x=600, y=320)
+    labelResultingNum = tkinter.Entry(lfSave, textvariable=resultNum,width=5 ,state='readonly')
+    labelResultingNum.grid(row=0,column=1)
 
     # Draws total number of pixels in image
-    labelTotalNumTitle = tkinter.Label(root, text="Total Pixels:")
-    labelTotalNumTitle.place(x=630, y=320)
+    labelTotalNumTitle = tkinter.Label(lfSave, text="Total Pixels:")
+    labelTotalNumTitle.grid(row=0, column=2)
     totalNum = tkinter.StringVar()
     totalNum.set("NaN")
-    labelTotalNum = tkinter.Entry(root, textvariable=totalNum,width=5 ,state= tkinter.DISABLED)
-    labelTotalNum.place(x=700, y=320)
+    labelTotalNum = tkinter.Entry(lfSave, textvariable=totalNum,width=5 ,state='readonly')
+    labelTotalNum.grid(row=0, column=3)
+
+
+    # Draws size scale
+    currImageScale = tkinter.DoubleVar()
+    currImageScale.set(1.0)
+    scaleImage = tkinter.Scale(root, variable=currImageScale, from_=0.1, to=5, orient=tkinter.VERTICAL, resolution=0.05, command=ScaleSizeSlider)
+    scaleImage.place(x=ciX+30, y=ciY+50)
+    labelImageScale = tkinter.Label(root, text="Scale:")
+    labelImageScale.place(x=ciX+0, y=ciY+90)
 
 
     # Draws buttons
-    calculateButton = tkinter.Button(root, text="Calculate", command=partial(CalculateDiff, imageFinal))
-    calculateButton.place(x=10,y=200)
-    saveButton = tkinter.Button(root, text="Save to file", command=SaveToFile)
-    saveButton.place(x=500, y=350)
-    
-    currImage = imageDisplay
+    calculateButton = tkinter.Button(lfAnnalysis, text="Calculate", command=CalculateDiff)
+    calculateButton.grid(row=3, column=1, pady=(10, 10), padx = (10, 0))
 
+
+    saveButton = tkinter.Button(lfSave, text="Save to file", command=SaveToFile)
+    saveButton.grid(row=0, column=4, pady=(0,10), padx=(10,10))
+
+    lfImages = tkinter.Label(root)
+    lfImages.place(x=ciX+80, y=ciY+40)
     
+    # Draws the orginial image set 
+    imageDisplay = tkinter.Label(lfImages)
+    imageDisplay.pack(side="left")
+    # Draws the result image initial is copy of first from image set
+    imageFinal = tkinter.Label(lfImages)
+    imageFinal.pack(side="left")
 
     # running the application
+    root.after(100, ReloadImages)
     root.mainloop()
