@@ -7,7 +7,7 @@
 # importing required packages
 import tkinter
 from tkinter import filedialog
-from PIL import ImageTk, Image
+from PIL import ImageTk, Image, ImageOps
 from functools import partial
 import numpy as np
 
@@ -175,16 +175,22 @@ def CalculateDiff():
     # draws the resulting image
     im = Image.fromarray(resultMap).convert('RGB')
     resultRGB = np.array(im)
+    colorDisplayed = [255, 0, 0]
+    if doGrayScale.get() == 1:
+        colorDisplayed = [255, 255, 255]
     for iy, ix, iz in np.ndindex(resultRGB.shape):
         if resultMap[iy][ix] != 0:
             if doGradient.get() == 1:
                 factor = resultMap[iy][ix] / baseLine[iy][ix]
-                resultRGB[iy][ix] = BlendRGB(factor,color1=[0,0,0], color2=[255,0,0])
+                resultRGB[iy][ix] = BlendRGB(factor,color1=[0,0,0], color2=colorDisplayed)
             else:
-                resultRGB[iy][ix] = np.array([255, 0, 0]).astype(np.uint8)
+                resultRGB[iy][ix] = np.array(colorDisplayed).astype(np.uint8)
     
 
+
     im = Image.fromarray(resultRGB)
+    #if doGrayScale.get() == 1:
+    #    im = ImageOps.grayscale(im)
     global resultPNG
     resultPNG = im
     #im = im.resize((int(im.width * currImageScale.get()), int(im.height * currImageScale.get())))
@@ -199,6 +205,12 @@ def ResetInputsGui():
 
     # Updates the Base scale
     scaleBase.config(to=len(rawImages))
+
+    # Updates check images max values
+    inputFrom.config(to=len(rawImages))
+    inputTo.config(to=len(rawImages))
+
+
     
 # Gets the files selected by the user and generates the image list and raw image list from the files
 # this also runs the acrivator function allowing the user to 
@@ -271,38 +283,38 @@ def SaveToFile():
 if __name__ == "__main__":
     # creating main window
     root = tkinter.Tk()
-    root.geometry('900x400')
+    root.geometry('900x500')
     root.title("Tkinter App")
 
     # coordinates for where the top left corner of the image viewing modules will generate
-    ciX = 230
+    ciX = 260
     ciY = 80
 
 
 
     # The Module that holds the sliders and input for the variables GUI
     lfAnnalysis = tkinter.LabelFrame(root, text="Process Variables")
-    lfAnnalysis.grid(row=0,column=0, padx=(10, 0), sticky="n")
+    lfAnnalysis.grid(row=1,column=0, padx=(10, 0), sticky="nw")
 
     # Draws Base scale and label
-    baseLabel = tkinter.Label(lfAnnalysis, text="Base Count:")
-    baseLabel.grid(row=0,column=0, pady=(15,0))
+    lfbaseLabel = tkinter.LabelFrame(lfAnnalysis, text="Base Count")
+    lfbaseLabel.grid(row=0,column=0, columnspan=2, padx=(10,10), pady=(10,10))
     currBase = tkinter.IntVar()
     currBase.set(1)
-    scaleBase = tkinter.Scale(lfAnnalysis, variable=currBase, from_=1, to=1, orient = tkinter.HORIZONTAL)
-    scaleBase.grid(row=0,column=1)
+    scaleBase = tkinter.Scale(lfbaseLabel, length=200, variable=currBase, from_=1, to=1, orient = tkinter.HORIZONTAL)
+    scaleBase.grid(row=0,column=0)
     
     # Draws Difference scale and label
-    diffLabel = tkinter.Label(lfAnnalysis, text="Difference amount:")
-    diffLabel.grid(row=1,column=0, pady=(15,0))
+    lfdiffLabel = tkinter.LabelFrame(lfAnnalysis, text="Difference amount:")
+    lfdiffLabel.grid(row=1,column=0, columnspan=2, padx=(10,10), pady=(10,10))
     currDiff = tkinter.IntVar()
     currDiff.set(40)
-    scaleDiff = tkinter.Scale(lfAnnalysis, variable=currDiff, from_=1, to=100, orient= tkinter.HORIZONTAL)
-    scaleDiff.grid(row=1,column=1)
+    scaleDiff = tkinter.Scale(lfdiffLabel, length=200, variable=currDiff, from_=1, to=100, orient= tkinter.HORIZONTAL)
+    scaleDiff.grid(row=0,column=0)
 
     # Sub module used to select which images to check
     lfCheck = tkinter.LabelFrame(lfAnnalysis, text = "Check Images")
-    lfCheck.grid(row=2, column=0, columnspan=2)
+    lfCheck.grid(row=2, column=0, columnspan=2, padx=(10,10), pady=(10,10))
 
     # Draws Check Images UI
     labelCheckFrom = tkinter.Label(lfCheck, text="From:")
@@ -310,31 +322,37 @@ if __name__ == "__main__":
     labelCheckTo = tkinter.Label(lfCheck, text="To:")
     labelCheckTo.grid(row=0, column=2)
     fromImgNum = tkinter.StringVar()
-    inputFrom = tkinter.Entry(lfCheck, textvariable=fromImgNum, width=5)
+    inputFrom = tkinter.Spinbox(lfCheck, from_=1, to=1, textvariable=fromImgNum, width=5)
     inputFrom.grid(row=0, column=1)
     toImgNum = tkinter.StringVar()
-    inputFrom = tkinter.Entry(lfCheck, textvariable=toImgNum, width=5)
-    inputFrom.grid(row=0, column=3, padx=(0, 10), pady=(10,10))
+    inputTo = tkinter.Spinbox(lfCheck, from_=1, to=1, textvariable=toImgNum, width=5)
+    inputTo.grid(row=0, column=3, padx=(0, 10), pady=(10,10))
 
-    # Draws checkbox and label
+    # Draws doGradient checkbox and label
     doGradient = tkinter.IntVar()
     doGradient.set(1)
     checkGradient = tkinter.Checkbutton(lfAnnalysis, text="Do Gradient", variable=doGradient, onvalue=1, offvalue=0)
     checkGradient.grid(row=3, column=0, sticky="w")
 
+    # Draws doGrayscale checkbox and label
+    doGrayScale = tkinter.IntVar()
+    doGrayScale.set(0)
+    checkGrayScale = tkinter.Checkbutton(lfAnnalysis, text="Gray Scale", variable=doGrayScale, onvalue=1, offvalue=0)
+    checkGrayScale.grid(row=4, column=0, sticky="w")
+
     # Draws calculate button
     calculateButton = tkinter.Button(lfAnnalysis, text="Calculate", command=CalculateDiff)
-    calculateButton.grid(row=3, column=1, sticky="e",  pady=(10, 10), padx = (0, 5))
+    calculateButton.grid(row=5, column=1, sticky="e",  pady=(10, 10), padx = (0, 5))
 
 
 
     # Module that contains ability to load files holds information about them
     lfImageInput = tkinter.LabelFrame(root, text="Import Files")
-    lfImageInput.grid(row=0, column=1, sticky="nw")
+    lfImageInput.grid(row=0, column=0, padx=(10, 10), sticky="nw")
 
     # Creates button to start file explorer for images needed to be analyzed
     buttonGetPNGs = tkinter.Button(lfImageInput, text="Find Images", command=BrowseFiles)
-    buttonGetPNGs.grid(row=0, column=3, padx=(10,100), pady=(0,10))
+    buttonGetPNGs.grid(row=0, column=3, padx=(27,5), pady=(20,15))
 
     # Label informing the amount of images loaded
     labelImagesLoaded = tkinter.Label(lfImageInput, text="Images Loaded:")
