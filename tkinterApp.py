@@ -172,13 +172,16 @@ def CalculateDiff():
             if resultMap[iy][ix] != 0:
                 resultMap[iy][ix] = min(resultMap[iy][ix], rawImages[i][iy][ix])
     
-    # draws the resulting image 
+    # draws the resulting image
     im = Image.fromarray(resultMap).convert('RGB')
     resultRGB = np.array(im)
     for iy, ix, iz in np.ndindex(resultRGB.shape):
         if resultMap[iy][ix] != 0:
-            factor = resultMap[iy][ix] / baseLine[iy][ix]
-            resultRGB[iy][ix] = BlendRGB(factor,color1=[0,0,0], color2=[255,0,0])
+            if doGradient.get() == 1:
+                factor = resultMap[iy][ix] / baseLine[iy][ix]
+                resultRGB[iy][ix] = BlendRGB(factor,color1=[0,0,0], color2=[255,0,0])
+            else:
+                resultRGB[iy][ix] = np.array([255, 0, 0]).astype(np.uint8)
     
 
     im = Image.fromarray(resultRGB)
@@ -250,8 +253,20 @@ def SaveToFile():
         initialfile="result.png", 
         defaultextension=".png",
     )
+
     if file is not None:
-        resultPNG.save(file.name, "PNG")
+        # if you do 
+        if doAlpha.get() == 0:
+            resultPNG.save(file.name, "PNG")
+        else:
+            RGB = np.array(resultPNG)
+            h, w = RGB.shape[:2]
+            # Add an alpha channel, fully opaque (255)
+            RGBA = np.dstack((RGB, np.zeros((h,w),dtype=np.uint8)+255))
+            # Make all pixels matched by mask into transparent ones
+            RGBA[(RGBA[:, :, 0:3] == [0,0,0]).all(2)] = (0,0,0,0)
+            # Convert Numnpy array back to PIL Image and save
+            Image.fromarray(RGBA).save(file.name, "PNG")
 
 if __name__ == "__main__":
     # creating main window
@@ -261,7 +276,7 @@ if __name__ == "__main__":
 
     # coordinates for where the top left corner of the image viewing modules will generate
     ciX = 230
-    ciY = 60
+    ciY = 80
 
 
 
@@ -282,7 +297,7 @@ if __name__ == "__main__":
     diffLabel.grid(row=1,column=0, pady=(15,0))
     currDiff = tkinter.IntVar()
     currDiff.set(40)
-    scaleDiff = tkinter.Scale(lfAnnalysis, variable=currDiff, from_=0, to=100, orient= tkinter.HORIZONTAL)
+    scaleDiff = tkinter.Scale(lfAnnalysis, variable=currDiff, from_=1, to=100, orient= tkinter.HORIZONTAL)
     scaleDiff.grid(row=1,column=1)
 
     # Sub module used to select which images to check
@@ -301,9 +316,15 @@ if __name__ == "__main__":
     inputFrom = tkinter.Entry(lfCheck, textvariable=toImgNum, width=5)
     inputFrom.grid(row=0, column=3, padx=(0, 10), pady=(10,10))
 
-    # Draws buttons
+    # Draws checkbox and label
+    doGradient = tkinter.IntVar()
+    doGradient.set(1)
+    checkGradient = tkinter.Checkbutton(lfAnnalysis, text="Do Gradient", variable=doGradient, onvalue=1, offvalue=0)
+    checkGradient.grid(row=3, column=0, sticky="w")
+
+    # Draws calculate button
     calculateButton = tkinter.Button(lfAnnalysis, text="Calculate", command=CalculateDiff)
-    calculateButton.grid(row=3, column=1, pady=(10, 10), padx = (10, 0))
+    calculateButton.grid(row=3, column=1, sticky="e",  pady=(10, 10), padx = (0, 5))
 
 
 
@@ -338,15 +359,22 @@ if __name__ == "__main__":
     labelResultingNum.grid(row=0,column=1)
 
     # Draws total number of pixels in image
-    labelTotalNumTitle = tkinter.Label(lfSave, text="Total Pixels:")
-    labelTotalNumTitle.grid(row=0, column=2)
+    labelTotalNumTitle = tkinter.Label(lfSave, text="Initial non-Empty Pixels:")
+    labelTotalNumTitle.grid(row=1, column=0)
     totalNum = tkinter.StringVar()
     totalNum.set("NaN")
     labelTotalNum = tkinter.Entry(lfSave, textvariable=totalNum,width=5 ,state='readonly')
-    labelTotalNum.grid(row=0, column=3)
+    labelTotalNum.grid(row=1, column=1)
 
+    # Draws checkbox and label
+    doAlpha = tkinter.IntVar()
+    doAlpha.set(0)
+    checkAlphat = tkinter.Checkbutton(lfSave, text="Save Black as Transparent", variable=doAlpha, onvalue=1, offvalue=0)
+    checkAlphat.grid(row=0, column=4, sticky="w")
+
+    # Draws save button
     saveButton = tkinter.Button(lfSave, text="Save to file", command=SaveToFile)
-    saveButton.grid(row=0, column=4, pady=(0,10), padx=(10,10))
+    saveButton.grid(row=1, column=4, pady=(0,10), padx=(10,10), sticky="se")
 
 
 
