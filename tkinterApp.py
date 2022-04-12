@@ -7,7 +7,7 @@
 # importing required packages
 import tkinter
 from tkinter import filedialog
-from PIL import ImageTk, Image, ImageOps
+from PIL import ImageTk, Image
 from functools import partial
 import numpy as np
 
@@ -336,7 +336,7 @@ if __name__ == "__main__":
 
     # Draws doGrayscale checkbox and label
     doGrayScale = tkinter.IntVar()
-    doGrayScale.set(0)
+    doGrayScale.set(1)
     checkGrayScale = tkinter.Checkbutton(lfAnnalysis, text="Gray Scale", variable=doGrayScale, onvalue=1, offvalue=0)
     checkGrayScale.grid(row=4, column=0, sticky="w")
 
