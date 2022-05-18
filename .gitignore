@@ -6,7 +6,8 @@ tempCodeRunnerFile.py
 
 # images created or being used
 *.png
-
+*.tiff
+*.tif
 # Folders and files used to try to creating an executable
 /build/
 /dist/
@@ -16,3 +17,8 @@ tkinterApp.spec
 
 # virtual environment folder
 /tkinterEnv/
+
+
+# allow folder with sample images
+!demo.png
+!Sample*.png

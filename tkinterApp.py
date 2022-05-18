@@ -5,11 +5,19 @@
 #
 #####
 # importing required packages
+from glob import glob
+from mimetypes import init
+from time import process_time_ns
 import tkinter
-from tkinter import filedialog
-from PIL import ImageTk, Image
+from tkinter import NW, filedialog, messagebox
+from PIL import ImageTk, Image, ImageFile
 from functools import partial
 import numpy as np
+from pytest import param
+from sklearn.covariance import graphical_lasso
+from sqlalchemy import column, false
+from matplotlib.figure import Figure
+from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg, NavigationToolbar2Tk)
 
 # list of file formats that are accepted by this program
 # more may work without much implementation but these are the ones that have been tested
@@ -17,27 +25,136 @@ ACCEPTED_FILE_FORMATS = ["tiff", "tif", "png", "ppm", "jpeg"]
 
 rawImages = [] # list of images in their raw form used for scaling and calculations based off them 
 resultPNG = [] # the resulting image generated 
+resultMap = [] # the resulting 2d value map of the image
+
 
 # the currTK variables are the images that are currently on display using tkinter that must be in
 # accessible to be viewed by tkinter
 currTKImage = []
 currTKResult = []
 
-# used to fix race condition of the scale image function
-def ReloadImages():
-    if currTKImage != []:
-        imageDisplay.config(image= currTKImage)
-    if currTKResult != []:
-        imageFinal.config(image=currTKResult)
-    root.after(10, ReloadImages)
+selectionBox = {"xStart": 0, "xEnd": 0, "yStart":0, "yEnd":0}
 
-# changes the image being presented to the one on the slider
-def SetImage(val):
-    im = Image.fromarray(rawImages[int(val) - 1])
-    global currTKImage
-    im = im.resize((int(im.width * currImageScale.get()), int(im.height * currImageScale.get())))
-    currTKImage = ImageTk.PhotoImage(im)
-    imageDisplay.config(image= currTKImage)
+initialClickX = 0
+initialClickY = 0
+
+# this allows corrupted files to be used and
+ImageFile.LOAD_TRUNCATED_IMAGES = True
+
+shiftHeld = False
+imageHover = False
+
+# used 
+finalXPos = 50
+
+# offset of the images from the corner of the canvas
+X_OFFSET = 10
+Y_OFFSET = 10
+
+def loop():
+    if imageHover and shiftHeld:
+        SetFleur()
+    else:
+        SetArrow()
+    root.after(5, loop)
+
+def clamp(num, min_value, max_value):
+        num = max(min(num, max_value), min_value)
+        return num
+
+def ImageEnter(event):
+    global imageHover 
+    imageHover = True
+
+def ImageExit(event):
+    global imageHover 
+    imageHover = False
+
+def ShiftDown(event):
+    global shiftHeld
+    shiftHeld = True
+    
+def ShiftUp(event):
+    global shiftHeld
+    shiftHeld = False
+    
+def SetFleur():
+    root.config(cursor="fleur")
+
+def SetArrow():
+    root.config(cursor="arrow")
+
+# helper function used for conversion from position on canvas to pixel coordinate in rawImages array
+def ToCoord(x, y):
+    return int((x - X_OFFSET) / currImageScale.get()), int((y - Y_OFFSET) / currImageScale.get())
+
+# Helper function used for conversion from pixel coordinate in rawImages array to position on canvas
+def ToImagePos(x, y):
+    return int(x * currImageScale.get() + X_OFFSET), int(y * currImageScale.get() + Y_OFFSET)
+
+# Refreshes the selection boxes to display correctly selected pixels
+def SetBox():
+    global selectionBox
+    global selectionSquareDisplay
+    global selectionSquareFinal
+    x1, y1 = ToImagePos(selectionBox["xStart"], selectionBox["yStart"])
+    x2, y2 = ToImagePos(selectionBox["xEnd"], selectionBox["yEnd"])
+
+    canvasImages.delete(selectionSquareDisplay)
+    selectionSquareDisplay = canvasImages.create_rectangle(
+        x1, y1, x2, y2, outline="red")
+
+    if resultPNG == []:
+        return
+
+    canvasImages.delete(selectionSquareFinal)
+    selectionSquareFinal = canvasImages.create_rectangle(
+        x1 + finalXPos, y1, x2 + finalXPos, y2, outline="red"
+    )
+
+# Event that occurs when image on canvas is clicked
+def ClickOnImage(event):
+    global selectionBox
+    # if shift held move box around
+    if shiftHeld:
+        # if box does not exist do not do anything
+        if selectionBox["xStart"] == 0 and selectionBox["yStart"] == 0 and selectionBox["xEnd"] == 0 and  selectionBox["yEnd"] == 0:
+            return 
+        global initialClickX
+        global initialClickY
+        initialClickX, initialClickY = ToCoord(event.x, event.y)
+    else:
+        
+        x, y = ToCoord(event.x, event.y)
+        selectionBox["xStart"] = x
+        selectionBox["yStart"] = y
+
+# Event that occurs when image on canvas is dragged
+def DragOnImage(event):
+    global selectionBox
+
+    x, y = ToCoord(event.x, event.y)
+    
+    selectionBox["xEnd"] = clamp(x, 0, len(rawImages[0][0]))
+    selectionBox["yEnd"] = clamp(y, 0, len(rawImages[0]))
+    SetBox()
+
+# Event that occurs when image on canvas is released
+def ReleasedOnImage(event):
+    #print("image released")
+    #print(event)
+    pass
+
+# Wrapper for when clicking on the result image 
+def ClickOnResult(event):
+    event.x = event.x - finalXPos
+    ClickOnImage(event)
+
+# Wrapper for when dragging on the result image 
+def DragOnResult(event):
+    event.x = event.x - finalXPos
+    DragOnImage(event)
+
 
 # Wrapper to allow Slider to call same function
 def ScaleSizeSlider(val):
@@ -51,19 +168,26 @@ def ScaleSize():
     
     im = Image.fromarray(rawImages[int(currImageIndex.get()) - 1])
     global currTKImage
-    im = im.resize((int(im.width * currImageScale.get()), int(im.height * currImageScale.get())))
+    im = im.resize((int(im.width * currImageScale.get()), int(im.height * currImageScale.get())), resample=0)
     currTKImage = ImageTk.PhotoImage(im)
-    imageDisplay.config(image= currTKImage)
-    
+    canvasImages.itemconfig(imageDisplay, image=currTKImage)
+
     # if the result image is not rendered do not scale it
     if resultPNG == []:
+        SetBox()
         return
 
     resultIM = resultPNG
     global currTKResult
-    resultIM = resultIM.resize((int(resultIM.width * currImageScale.get()), int(resultIM.height * currImageScale.get())))
+    global finalXPos
+    resultIM = resultIM.resize((int(resultIM.width * currImageScale.get()), int(resultIM.height * currImageScale.get())), resample=0)
     currTKResult = ImageTk.PhotoImage(resultIM)
-    imageFinal.config(image=currTKResult)
+    
+    canvasImages.itemconfig(imageFinal, image=currTKResult)
+    finalXPos = 20 + im.width
+    canvasImages.moveto(imageFinal, finalXPos + X_OFFSET , Y_OFFSET)
+    
+    SetBox()
 
 # used to show a message to the user in a new window
 def Alert(message):
@@ -100,33 +224,12 @@ def BlendRGB(factor, color1 = [0,0,0], color2 = [255, 255, 255]):
     
     result = c1 * factor + c2 * (1 - factor)
     return result.astype(np.uint8)
-    red = 0
-    green = 0
-    blue = 0
-    if color1[0] > color2[0]:
-        red = color2[0] + (factor * (color1[0] - color2[0]))
-    else:
-        red = color1[0] + (factor * (color2[0] - color1[0]))
-        
-    if color1[1] > color2[1]:
-        green = color2[1] + (factor * (color1[1] - color2[1]))
-    else:
-        green = color1[1] + (factor * (color2[1] - color1[1]))
-        
-    if color1[2] > color2[2]:
-        blue = color2[2] + (factor * (color1[2] - color2[2]))
-    else:
-        blue = color1[2] + (factor * (color2[2] - color1[2]))
 
-    red = int(red)
-    green = int(green)
-    blue = int(blue)
-
-    return np.array([red, green, blue], dtype=np.uint8)
 
 # calculates the difference and highlights the pixels that match the specifications
 def CalculateDiff():
     global currImageScale
+    global resultMap
     if not ValidateInput():
         return
 
@@ -189,11 +292,8 @@ def CalculateDiff():
 
 
     im = Image.fromarray(resultRGB)
-    #if doGrayScale.get() == 1:
-    #    im = ImageOps.grayscale(im)
     global resultPNG
     resultPNG = im
-    #im = im.resize((int(im.width * currImageScale.get()), int(im.height * currImageScale.get())))
 
     ScaleSize()
 
@@ -207,10 +307,10 @@ def ResetInputsGui():
     scaleBase.config(to=len(rawImages))
 
     # Updates check images max values
+    inputAUCFrom.config(to=len(rawImages))
+    inputAUCTo.config(to=len(rawImages))
     inputFrom.config(to=len(rawImages))
     inputTo.config(to=len(rawImages))
-
-
     
 # Gets the files selected by the user and generates the image list and raw image list from the files
 # this also runs the acrivator function allowing the user to 
@@ -227,7 +327,7 @@ def BrowseFiles():
 
     # makes sure all files are in the correct file format
     for im in chosenImagePaths:
-        if (im.split('.', 1)[1]).lower() not in ACCEPTED_FILE_FORMATS:
+        if (im.split('.')[-1]).lower() not in ACCEPTED_FILE_FORMATS:
             Alert("\"." + im.split('.', 1)[1] + "\" is not a supported file format")
             return
 
@@ -239,19 +339,14 @@ def BrowseFiles():
         # if the file is tiff check if it is a multiframe file and inset each frame as an image
         if fileType == "tiff" or fileType == "tif":
             tiffStack = Image.open(im)
-            #print(tiffStack.info)
             if tiffStack.info.get("compression") != "raw":
                 Alert("Warning the tiff file compression is not raw this may crash the app")
             for i in range (tiffStack.n_frames):
                 tiffStack.seek(i)
-                curr = tiffStack
-                rawImages.append(np.array(curr))
-                curr = curr.resize((int(curr.width * currImageScale.get()), int(curr.height * currImageScale.get())))
+                rawImages.append(np.array(tiffStack))
 
         else:
-            curr = Image.open(im)
-            rawImages.append(np.array(curr))
-            curr = curr.resize((int(curr.width * currImageScale.get()), int(curr.height * currImageScale.get())))
+            rawImages.append(np.array(Image.open(im)))
     
     ResetInputsGui()
 
@@ -280,36 +375,118 @@ def SaveToFile():
             # Convert Numnpy array back to PIL Image and save
             Image.fromarray(RGBA).save(file.name, "PNG")
 
+# Constructs a matplotlib graph from the images loaded
+def ConstructGraph():
+    if len(rawImages) == 0:
+        Alert("No Images Selected")
+        return
+    if len(resultMap) == 0:
+        Alert("Result Image Not Generated")
+        return
+    graphFigure = Figure(figsize = (3.5, 3), dpi= 100)
+
+    # getting the baseline by getting the average pixel value
+    
+    # if using the ROI change the loop constraints
+    xList = []
+    yList = []
+    if useROI.get():
+        if selectionBox["xStart"] > selectionBox["xEnd"]:
+            yList = range(selectionBox["xEnd"], selectionBox["xStart"])
+        else:
+            yList = range(selectionBox["xStart"], selectionBox["xEnd"])
+        
+        if selectionBox["yStart"] > selectionBox["yEnd"]:
+            xList = range(selectionBox["yEnd"], selectionBox["yStart"])
+        else:
+            xList = range(selectionBox["yStart"], selectionBox["yEnd"])
+        
+    else:
+        xList = range(len(rawImages[0]))
+        yList = range(len(rawImages[0][0]))
+
+    countBase = 0
+    countCurve = 0
+    curve = [0] * len(rawImages)
+    pixelTotalVal = 0
+    for ix in xList:
+        for iy in yList:
+            if (not useResult.get()) or resultMap[ix][iy] != 0:
+                countCurve += 1
+                for i in range(len(rawImages)):
+                    curve[i] += rawImages[i][ix][iy]
+                for i in range(currBase.get()):
+                    countBase += 1
+                    pixelTotalVal += rawImages[i][ix][iy]
+    if countBase == 0 or countCurve == 0:
+        Alert("No pixels possible to graph")
+        return
+    pixelTotalVal = pixelTotalVal / countBase
+    curve[:] = [x / countCurve for x in curve]
+
+    # adding the subplot
+    plot1 = graphFigure.add_subplot(111)    
+
+    # plotting the graph and setting it up
+    plot1.axhline(y=pixelTotalVal, color="r")
+    plot1.plot(list(range(1, 1 + len(rawImages))), curve)
+
+    
+    plot1.set_xlabel("Frame", fontsize=10)
+    plot1.set_ylabel("Avg Pixel Value", fontsize=10)
+    #plot1.set_xlim(1, 1 + len(rawImages))
+    plot1.set_ylim(0, 255)
+    plot1.set_xticks(np.arange(1, 1 + len(rawImages), 1))
+    graphFigure.tight_layout()
+
+    # creating the Tkinter canvas
+    # containing the Matplotlib figure
+    graphCanvas = FigureCanvasTkAgg(graphFigure, master = lfAUC) 
+    graphCanvas.get_tk_widget().grid(row=4, column=0, columnspan=5, padx=10, sticky="nw")
+    graphCanvas.draw()
+
+    ###############    TOOLBAR    ###############
+    toolbarFrame = tkinter.Frame(lfAUC)
+    toolbarFrame.grid(row=5,column=0, columnspan=5, sticky= "w", padx=(5,5))
+    toolbar = NavigationToolbar2Tk(graphCanvas, toolbarFrame, pack_toolbar =False)
+    toolbar.pack(side=tkinter.LEFT)
+
+
+    # Area Under curve value
+    region = curve[int(fromImgAUCNum.get()) - 1:int(toImgAUCNum.get())]
+    resultAUC.set(np.trapz([pixelTotalVal - x for x in region]))
+    
 if __name__ == "__main__":
     # creating main window
     root = tkinter.Tk()
-    root.geometry('900x500')
+    root.geometry('1100x900')   
     root.title("Tkinter App")
 
     # coordinates for where the top left corner of the image viewing modules will generate
-    ciX = 260
+    ciX = 400
     ciY = 80
 
+    #root['cursor']='@mouse.cur'
 
 
     # The Module that holds the sliders and input for the variables GUI
     lfAnnalysis = tkinter.LabelFrame(root, text="Process Variables")
-    lfAnnalysis.grid(row=1,column=0, padx=(10, 0), sticky="nw")
+    lfAnnalysis.grid(row=1,column=0, padx=(10, 0), sticky="nwse")
 
     # Draws Base scale and label
     lfbaseLabel = tkinter.LabelFrame(lfAnnalysis, text="Base Count")
-    lfbaseLabel.grid(row=0,column=0, columnspan=2, padx=(10,10), pady=(10,10))
+    lfbaseLabel.grid(row=0,column=0, columnspan=3, padx=(10,10), pady=(10,10))
     currBase = tkinter.IntVar()
     currBase.set(1)
-    scaleBase = tkinter.Scale(lfbaseLabel, length=200, variable=currBase, from_=1, to=1, orient = tkinter.HORIZONTAL)
+    scaleBase = tkinter.Scale(lfbaseLabel, length=350, variable=currBase, from_=1, to=1, orient = tkinter.HORIZONTAL)
     scaleBase.grid(row=0,column=0)
     
     # Draws Difference scale and label
     lfdiffLabel = tkinter.LabelFrame(lfAnnalysis, text="Difference amount:")
-    lfdiffLabel.grid(row=1,column=0, columnspan=2, padx=(10,10), pady=(10,10))
+    lfdiffLabel.grid(row=1,column=0, columnspan=3, padx=(10,10), pady=(10,10))
     currDiff = tkinter.IntVar()
     currDiff.set(40)
-    scaleDiff = tkinter.Scale(lfdiffLabel, length=200, variable=currDiff, from_=1, to=100, orient= tkinter.HORIZONTAL)
+    scaleDiff = tkinter.Scale(lfdiffLabel, length=350, variable=currDiff, from_=1, to=100, orient= tkinter.HORIZONTAL)
     scaleDiff.grid(row=0,column=0)
 
     # Sub module used to select which images to check
@@ -342,13 +519,59 @@ if __name__ == "__main__":
 
     # Draws calculate button
     calculateButton = tkinter.Button(lfAnnalysis, text="Calculate", command=CalculateDiff)
-    calculateButton.grid(row=5, column=1, sticky="e",  pady=(10, 10), padx = (0, 5))
+    calculateButton.grid(row=2, column=1, rowspan=2, sticky="e",  pady=(10, 10), padx = (0, 5))
 
+
+
+    # Module used to select area under curve info
+    lfAUC = tkinter.LabelFrame(root, text="Area Under Curve")
+    lfAUC.grid(row=2,column=0, padx=(10, 0), pady=(10, 0), sticky="nwse")
+
+    # Draws Use ROI checkbox and label
+    useROI = tkinter.IntVar()
+    useROI.set(0)
+    checkUseROI = tkinter.Checkbutton(lfAUC, text="Use ROI", variable=useROI, onvalue=1, offvalue=0)
+    checkUseROI.grid(row=2, column=3, sticky="w")
+
+    # Draws Use Result Image and label
+    useResult = tkinter.IntVar()
+    useResult.set(1)
+    checkUseResult = tkinter.Checkbutton(lfAUC, text="Use Result Image", variable=useResult, onvalue=1, offvalue=0)
+    checkUseResult.grid(row=2, column=2, sticky="w")
+
+    # Draws calculate button
+    calculateAUCButton = tkinter.Button(lfAUC, text="Calculate", command=ConstructGraph)
+    calculateAUCButton.grid(row=2, column=4, sticky="w",  pady=(10, 10), padx = (0, 5))
+
+    # Draws AUC value
+    labelAUCTitle = tkinter.Label(lfAUC, text="Area Under Curve:")
+    labelAUCTitle.grid(row=3, column=3, sticky="e")
+    resultAUC = tkinter.StringVar()
+    resultAUC.set("NaN")
+    labelAUC = tkinter.Entry(lfAUC, textvariable=resultAUC, width=10 ,state='readonly')
+    labelAUC.grid(row=3,column=4, sticky="w")
+
+
+    # Sub module used to select which images to check
+    lfAUCCheck = tkinter.LabelFrame(lfAUC, text = "Check Images")
+    lfAUCCheck.grid(row=3, column=0, columnspan=3, padx=(10,10), pady=(10,10))
+
+    # Draws Check Images UI
+    labelAUCCheckFrom = tkinter.Label(lfAUCCheck, text="From:")
+    labelAUCCheckFrom.grid(row=0, column=0)
+    labelAUCCheckTo = tkinter.Label(lfAUCCheck, text="To:")
+    labelAUCCheckTo.grid(row=0, column=2)
+    fromImgAUCNum = tkinter.StringVar()
+    inputAUCFrom = tkinter.Spinbox(lfAUCCheck, from_=1, to=1, textvariable=fromImgAUCNum, width=5)
+    inputAUCFrom.grid(row=0, column=1)
+    toImgAUCNum = tkinter.StringVar()
+    inputAUCTo = tkinter.Spinbox(lfAUCCheck, from_=1, to=1, textvariable=toImgAUCNum, width=5)
+    inputAUCTo.grid(row=0, column=3, padx=(0, 10), pady=(10,10))
 
 
     # Module that contains ability to load files holds information about them
     lfImageInput = tkinter.LabelFrame(root, text="Import Files")
-    lfImageInput.grid(row=0, column=0, padx=(10, 10), sticky="nw")
+    lfImageInput.grid(row=0, column=0, padx=(10, 10), sticky="nwse")
 
     # Creates button to start file explorer for images needed to be analyzed
     buttonGetPNGs = tkinter.Button(lfImageInput, text="Find Images", command=BrowseFiles)
@@ -363,10 +586,9 @@ if __name__ == "__main__":
     labelImagesNum.grid(row=0, column=1)
 
 
-
     # Module that contains ability to save results and holds information about result image
     lfSave= tkinter.LabelFrame(root, text="Result")
-    lfSave.grid(row=0, column=2, sticky="n")
+    lfSave.grid(row=0, column=1, padx=(10,10), sticky="nwse")
 
     # Draws number of pixels that fulfull the requirement
     labelResultingNumTitle = tkinter.Label(lfSave, text="Number of Pixels:")
@@ -394,14 +616,11 @@ if __name__ == "__main__":
     saveButton = tkinter.Button(lfSave, text="Save to file", command=SaveToFile)
     saveButton.grid(row=1, column=4, pady=(0,10), padx=(10,10), sticky="se")
 
-
-
-
     # Draws current image scale and its label
     labelCurrImg = tkinter.Label(root, text="Current Image:")
     labelCurrImg.place(x=ciX+0, y=ciY+20)
     currImageIndex = tkinter.IntVar()
-    scaleCurrImg = tkinter.Scale(root, from_=1, to=1, variable=currImageIndex, orient = tkinter.HORIZONTAL, command=SetImage)
+    scaleCurrImg = tkinter.Scale(root, from_=1, to=1, variable=currImageIndex, orient = tkinter.HORIZONTAL, command=ScaleSizeSlider)
     scaleCurrImg.place(x=ciX+90, y=ciY+0)
     
     # Draws size scale and its label
@@ -415,16 +634,35 @@ if __name__ == "__main__":
     # Module managing location of loaded and result images
     lfImages = tkinter.Label(root)
     lfImages.place(x=ciX+80, y=ciY+40)
+
+    # creates the canvas images and some overlays are on
+    canvasImages = tkinter.Canvas(lfImages, width=1600, height=800)
+    canvasImages.pack(side="left")
+
+    # adds image objects to the canvas
+    imageDisplay = canvasImages.create_image(10, 10, anchor=NW, image="")
+    imageFinal = canvasImages.create_image(50, 10, anchor=NW, image="")
     
-    # Draws the orginial image set 
-    imageDisplay = tkinter.Label(lfImages)
-    imageDisplay.pack(side="left")
-    # Draws the result image initial is copy of first from image set
-    imageFinal = tkinter.Label(lfImages)
-    imageFinal.pack(side="left")
+    # binds the click events for the images 
+    canvasImages.tag_bind(imageDisplay, "<B1-Motion>", DragOnImage)
+    canvasImages.tag_bind(imageDisplay, "<Button-1>", ClickOnImage)
+    
+    canvasImages.tag_bind(imageFinal, "<B1-Motion>", DragOnResult)
+    canvasImages.tag_bind(imageFinal, "<Button-1>", ClickOnResult)
 
+    canvasImages.tag_bind(imageDisplay, "<Enter>", ImageEnter)
+    canvasImages.tag_bind(imageDisplay, "<Leave>", ImageExit)
+    canvasImages.tag_bind(imageFinal, "<Enter>", ImageEnter)
+    canvasImages.tag_bind(imageFinal, "<Leave>", ImageExit)
+    
+    selectionSquareDisplay = canvasImages.create_rectangle(X_OFFSET, Y_OFFSET, X_OFFSET, Y_OFFSET, outline="white", state=tkinter.DISABLED)
+    selectionSquareFinal = canvasImages.create_rectangle(50, Y_OFFSET, 50, Y_OFFSET, outline="white", state=tkinter.DISABLED)
 
+    canvasImages.delete(selectionSquareDisplay)
+    canvasImages.delete(selectionSquareFinal)
 
-    # running the application and the function being executed in parallel
-    root.after(100, ReloadImages)
+    root.bind("<Shift_L>", ShiftDown)
+    root.bind("<KeyRelease-Shift_L>", ShiftUp)
+
+    root.after(100, loop)
     root.mainloop()

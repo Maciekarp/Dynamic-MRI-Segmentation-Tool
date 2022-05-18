@@ -1,6 +1,12 @@
+# About this project
+![Snippet Image of the Project](SampleImages/demo.png)
+
+
 This is a simple python tkinter app used to aid in image analysis
 
-
+To read the 2dseq Brucker files this project will use
+`BrukerMRI.py` from [jdoepfert's brukerMRI module](https://github.com/jdoepfert/brukerMRI)
+But this is not inplemented y
 # How To run:
 If you have python installed and all the correct packages simply running tkinterApp.py with python should work
 
