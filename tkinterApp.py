@@ -5,6 +5,7 @@
 #
 #####
 # importing required packages
+from glob import glob
 import tkinter
 from tkinter import NW, filedialog, messagebox
 from PIL import ImageTk, Image, ImageFile
@@ -44,6 +45,8 @@ imageHover = False
 # used 
 finalXPos = 50
 
+
+pixelTotalVal = 0
 graphVals = []
 
 # offset of the images from the corner of the canvas
@@ -390,6 +393,7 @@ def SaveToFile():
 
 # Constructs a matplotlib graph from the images loaded
 def ConstructGraph():
+    global pixelTotalVal
     if len(rawImages) == 0:
         Alert("No Images Selected")
         return
@@ -485,6 +489,7 @@ def SaveCSV():
     if file is not None:
         df = pd.DataFrame(np.asarray(graphVals))
         df.columns = ['frame','value']
+        df['base line'] = pd.Series([pixelTotalVal for x in range(len(df.index))])
         df.to_csv(file.name)
 
 # Saves the graph data to a xlsx file
@@ -498,6 +503,7 @@ def SaveExcel():
     if file is not None:
         df = pd.DataFrame(np.asarray(graphVals))
         df.columns = ['frame','value']
+        df['base line'] = pd.Series([pixelTotalVal for x in range(len(df.index))])
         writer = pd.ExcelWriter(file.name, engine='xlsxwriter')
         df.to_excel(writer)
         writer.save()
@@ -563,7 +569,7 @@ def OpenNewWindow():
 if __name__ == "__main__":
     # creating main window
     root = tkinter.Tk()
-    root.geometry('1100x900')   
+    root.geometry('1200x950')   
     root.title("Tkinter App")
 
     # coordinates for where the top left corner of the image viewing modules will generate
