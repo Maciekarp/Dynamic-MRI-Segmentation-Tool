@@ -5,19 +5,15 @@
 #
 #####
 # importing required packages
-from glob import glob
-from mimetypes import init
-from time import process_time_ns
 import tkinter
 from tkinter import NW, filedialog, messagebox
 from PIL import ImageTk, Image, ImageFile
 from functools import partial
 import numpy as np
-from pytest import param
-from sklearn.covariance import graphical_lasso
-from sqlalchemy import column, false
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg, NavigationToolbar2Tk)
+from tkinter import ttk
+import pandas as pd
 
 # list of file formats that are accepted by this program
 # more may work without much implementation but these are the ones that have been tested
@@ -46,6 +42,8 @@ imageHover = False
 
 # used 
 finalXPos = 50
+
+graphVals = []
 
 # offset of the images from the corner of the canvas
 X_OFFSET = 10
@@ -380,7 +378,7 @@ def ConstructGraph():
     if len(rawImages) == 0:
         Alert("No Images Selected")
         return
-    if len(resultMap) == 0:
+    if len(resultMap) == 0 and useResult.get():
         Alert("Result Image Not Generated")
         return
     graphFigure = Figure(figsize = (3.5, 3), dpi= 100)
@@ -450,12 +448,89 @@ def ConstructGraph():
     toolbarFrame.grid(row=5,column=0, columnspan=5, sticky= "w", padx=(5,5))
     toolbar = NavigationToolbar2Tk(graphCanvas, toolbarFrame, pack_toolbar =False)
     toolbar.pack(side=tkinter.LEFT)
-
+    global graphVals
+    graphVals = [(i + 1, curve[i])  for i in range(len(curve))]
 
     # Area Under curve value
     region = curve[int(fromImgAUCNum.get()) - 1:int(toImgAUCNum.get())]
     resultAUC.set(np.trapz([pixelTotalVal - x for x in region]))
+
+    # Draws show data button
+    graphDataButton = tkinter.Button(lfAUC, text="Graph Data", command=OpenNewWindow)
+    graphDataButton.grid(row=6, column=4, sticky="w",  pady=(10, 10), padx = (0, 5))
+
     
+def SaveCSV():
+    global graphVals
+    file = tkinter.filedialog.asksaveasfile(
+        initialfile="graphData.csv", 
+        defaultextension=".csv",
+    )
+
+    if file is not None:
+        pd.DataFrame(np.asarray(graphVals)).to_csv(file)
+
+
+# Opens new window with data
+def OpenNewWindow():     
+    # Toplevel object which will
+    # be treated as a new window
+    newWindow = tkinter.Toplevel(root)
+ 
+    # sets the title of the
+    # Toplevel widget
+    newWindow.title("Graph Data")
+ 
+    # sets the geometry of toplevel
+    newWindow.geometry("230x230")
+ 
+    # A Label widget to show in toplevel
+    menuBar = tkinter.Menu(newWindow)
+    filemenu = tkinter.Menu(menuBar, tearoff=0)
+    filemenu.add_command(label="Save to CSV", command=SaveCSV)
+
+    menuBar.add_cascade(label="File", menu=filemenu)
+
+    newWindow.configure(menu=menuBar)
+
+    # Scrollbars
+    outputScroll = ttk.Scrollbar(newWindow)
+    outputScroll.grid(row=1, column=1, sticky="ns")
+
+    outputSideScroll = ttk.Scrollbar(newWindow, orient=tkinter.HORIZONTAL)
+    outputSideScroll.grid(row=2, column=0, sticky="ew")
+
+    output = ttk.Treeview(newWindow, yscrollcommand=outputScroll.set, xscrollcommand=outputSideScroll.set)
+    output.grid(row=1, column=0, sticky="nsew")
+
+    outputScroll.config(command=output.yview)
+    outputSideScroll.config(command=output.xview)
+    output.column("#0", width=400, stretch=tkinter.NO)
+    
+
+
+    # deletes previous values if they exist
+    #output.column("#0", width=400, stretch=tk.NO)
+    for i in output.get_children():
+        output.delete(i)
+
+    rowHeaders = ["Frame", "Value"]
+
+    # generates columns and column headers
+    output['columns'] = rowHeaders
+    output.column("#0", width=0, stretch=tkinter.NO)
+    output.heading("#0",text="",anchor=tkinter.CENTER)
+    for col in rowHeaders:
+        output.column(col, anchor=tkinter.CENTER, width=100)
+        output.heading(col, text=col, anchor=tkinter.CENTER)
+    global graphVals
+    # Generates values
+    for row in range(len(graphVals)):
+        output.insert(parent='',index='end',iid=row, values=graphVals[row])
+
+
+    
+
 if __name__ == "__main__":
     # creating main window
     root = tkinter.Tk()
