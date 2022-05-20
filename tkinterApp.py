@@ -23,6 +23,7 @@ rawImages = [] # list of images in their raw form used for scaling and calculati
 resultPNG = [] # the resulting image generated 
 resultMap = [] # the resulting 2d value map of the image
 
+dragged = False
 
 # the currTK variables are the images that are currently on display using tkinter that must be in
 # accessible to be viewed by tkinter
@@ -129,6 +130,8 @@ def ClickOnImage(event):
 
 # Event that occurs when image on canvas is dragged
 def DragOnImage(event):
+    global dragged
+    dragged = True
     global selectionBox
 
     x, y = ToCoord(event.x, event.y)
@@ -139,9 +142,15 @@ def DragOnImage(event):
 
 # Event that occurs when image on canvas is released
 def ReleasedOnImage(event):
-    #print("image released")
-    #print(event)
-    pass
+    global dragged
+    if not dragged:
+        selectionBox["xStart"] = 0
+        selectionBox["xEnd"] = 0
+        selectionBox["yStart"] = 0
+        selectionBox["yEnd"] = 0
+        SetBox()
+    else:
+        dragged = False
 
 # Wrapper for when clicking on the result image 
 def ClickOnResult(event):
@@ -152,6 +161,12 @@ def ClickOnResult(event):
 def DragOnResult(event):
     event.x = event.x - finalXPos
     DragOnImage(event)
+
+# Wrapper for when released on the result image 
+def ReleasedOnResult(event):
+    event.x = event.x - finalXPos
+    ReleasedOnImage(event)
+
 
 
 # Wrapper to allow Slider to call same function
@@ -449,7 +464,7 @@ def ConstructGraph():
     toolbar = NavigationToolbar2Tk(graphCanvas, toolbarFrame, pack_toolbar =False)
     toolbar.pack(side=tkinter.LEFT)
     global graphVals
-    graphVals = [(i + 1, curve[i])  for i in range(len(curve))]
+    graphVals = [[i + 1, curve[i]]  for i in range(len(curve))]
 
     # Area Under curve value
     region = curve[int(fromImgAUCNum.get()) - 1:int(toImgAUCNum.get())]
@@ -459,7 +474,7 @@ def ConstructGraph():
     graphDataButton = tkinter.Button(lfAUC, text="Graph Data", command=OpenNewWindow)
     graphDataButton.grid(row=6, column=4, sticky="w",  pady=(10, 10), padx = (0, 5))
 
-    
+# Saves the graph data to a csv file
 def SaveCSV():
     global graphVals
     file = tkinter.filedialog.asksaveasfile(
@@ -468,8 +483,24 @@ def SaveCSV():
     )
 
     if file is not None:
-        pd.DataFrame(np.asarray(graphVals)).to_csv(file)
+        df = pd.DataFrame(np.asarray(graphVals))
+        df.columns = ['frame','value']
+        df.to_csv(file.name)
 
+# Saves the graph data to a xlsx file
+def SaveExcel():
+    global graphVals
+    file = tkinter.filedialog.asksaveasfile(
+        initialfile="graphData.xlsx", 
+        defaultextension=".xlsx",
+    )
+    
+    if file is not None:
+        df = pd.DataFrame(np.asarray(graphVals))
+        df.columns = ['frame','value']
+        writer = pd.ExcelWriter(file.name, engine='xlsxwriter')
+        df.to_excel(writer)
+        writer.save()
 
 # Opens new window with data
 def OpenNewWindow():     
@@ -487,7 +518,8 @@ def OpenNewWindow():
     # A Label widget to show in toplevel
     menuBar = tkinter.Menu(newWindow)
     filemenu = tkinter.Menu(menuBar, tearoff=0)
-    filemenu.add_command(label="Save to CSV", command=SaveCSV)
+    filemenu.add_command(label="Save to csv", command=SaveCSV)
+    filemenu.add_command(label="Save to xlsx", command=SaveExcel)
 
     menuBar.add_cascade(label="File", menu=filemenu)
 
@@ -527,9 +559,6 @@ def OpenNewWindow():
     # Generates values
     for row in range(len(graphVals)):
         output.insert(parent='',index='end',iid=row, values=graphVals[row])
-
-
-    
 
 if __name__ == "__main__":
     # creating main window
@@ -724,6 +753,10 @@ if __name__ == "__main__":
     
     canvasImages.tag_bind(imageFinal, "<B1-Motion>", DragOnResult)
     canvasImages.tag_bind(imageFinal, "<Button-1>", ClickOnResult)
+
+    canvasImages.tag_bind(imageDisplay, "<ButtonRelease-1>", ReleasedOnImage)
+    canvasImages.tag_bind(imageFinal, "<ButtonRelease-1>", ReleasedOnResult)
+    
 
     canvasImages.tag_bind(imageDisplay, "<Enter>", ImageEnter)
     canvasImages.tag_bind(imageDisplay, "<Leave>", ImageExit)
